@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGradient" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#140b3c"/>
+      <stop offset="40%" stop-color="#23006a"/>
+      <stop offset="80%" stop-color="#80007b"/>
+      <stop offset="100%" stop-color="#ff007f"/>
+    </linearGradient>
+    
+    <!-- Lens Fill Gradient -->
+    <linearGradient id="lensGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00ffff" stop-opacity="0.6"/>
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.3"/>
+      <stop offset="70%" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#00ffff" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="2" y="2" width="60" height="60" rx="16" ry="16" fill="url(#bgGradient)" stroke="#ffffff" stroke-width="1" stroke-opacity="0.15"/>
+
+  <!-- Entering Rays Glow (Thick, low opacity) -->
+  <!-- Red Ray (Top) -->
+  <path d="M 2 20 L 28 20 C 30 20 31.5 22 32 32" stroke="#ff0044" stroke-width="3.5" opacity="0.4" fill="none"/>
+  <!-- Green Ray (Middle) -->
+  <path d="M 2 32 L 32 32" stroke="#00ff66" stroke-width="3.5" opacity="0.4" fill="none"/>
+  <!-- Blue Ray (Bottom) -->
+  <path d="M 2 44 L 28 44 C 30 44 31.5 42 32 32" stroke="#0088ff" stroke-width="3.5" opacity="0.4" fill="none"/>
+
+  <!-- Exiting Ray Glow (Thick white/cyan glow) -->
+  <path d="M 32 32 L 56 32" stroke="#00ffff" stroke-width="4.5" opacity="0.4" fill="none"/>
+  <path d="M 32 32 L 56 32" stroke="#ffffff" stroke-width="3" opacity="0.7" fill="none"/>
+
+  <!-- Core Rays (Sharp center) -->
+  <path d="M 2 20 L 28 20 C 30 20 31.5 22 32 32" stroke="#ff4466" stroke-width="1.5" fill="none"/>
+  <path d="M 2 32 L 32 32" stroke="#66ff88" stroke-width="1.5" fill="none"/>
+  <path d="M 2 44 L 28 44 C 30 44 31.5 42 32 32" stroke="#66b3ff" stroke-width="1.5" fill="none"/>
+  <path d="M 32 32 L 56 32" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+
+  <!-- Lens Glass Body (Flat vertical ellipse) -->
+  <ellipse cx="32" cy="32" rx="4" ry="18" fill="url(#lensGrad)"/>
+
+  <!-- Lens Outer Rim -->
+  <ellipse cx="32" cy="32" rx="4.5" ry="18.5" fill="none" stroke="#00ffff" stroke-width="1.5" opacity="0.5"/>
+  <ellipse cx="32" cy="32" rx="4.5" ry="18.5" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.8"/>
+
+  <!-- Lens Glass Highlight (Glossy shine) -->
+  <path d="M 31 16 A 4 18 0 0 1 33 28 A 3 10 0 0 0 31.5 19 Z" fill="#ffffff" opacity="0.5"/>
+</svg>

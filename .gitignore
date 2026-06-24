@@ -1,0 +1,35 @@
+# Compiled binaries and libraries
+*.so
+*.o
+*.a
+
+# Build directory
+build/
+
+# Qt/KDE generated files
+*_autogen/
+.rcc/
+qrc_*.cpp
+*_qmltyperegistrations.cpp
+meta_types/
+qmltypes/
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+CMakeSettings.json
+Makefile
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+install_manifest_*.txt
+prefix.sh
+prefix.sh.fish
+
+# Editor backups and local config
+*~
+.directory
+.vscode/
+.idea/
+*.user
+*.user.*

@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Tankred"
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "Adjust monitor color saturation using vibrant-cli",
+        "Icon": "org.kde.plasmaglow",
+        "Id": "org.kde.plasmaglow",
+        "License": "GPL-2.0+",
+        "Name": "PlasmaGlow",
+        "Version": "1.0.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
