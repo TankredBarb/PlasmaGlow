@@ -17,10 +17,9 @@ installation shares the applet and effect binaries, not user preferences. The
 same account reuses its values across X11 and Wayland sessions, and the applet
 applies the saved pair when that session's backend is ready. Changes are saved
 after a short delay, and pending changes are saved when the applet closes. The
-effect performs correction per window before final composition,
-so transparent surfaces may differ from a correction applied to the final
-output. Initial shader behavior targets SDR; HDR and wide-gamut behavior are
-unconfirmed.
+effect processes the composited screen, including newly opened windows and
+transparent surfaces. Initial shader behavior targets SDR; HDR and wide-gamut
+behavior are unconfirmed.
 
 ## Requirements
 
@@ -63,7 +62,9 @@ replacing an already loaded effect binary.
 3. Add it to the panel or desktop.
 
 In a Wayland session, the applet checks for and loads its own KWin effect when it
-starts. Use Refresh to retry if the effect is unavailable. The user confirmed in
+starts. KWin also loads the effect at session startup, and the effect reads that
+account's saved values before the applet appears. Use Refresh to retry if the
+effect is unavailable. The user confirmed in
 a live Wayland session that gamma, presets, and grayscale at zero saturation
 work, and that saved settings survive a session restart. Additional rendering
 edge cases are tracked in the implementation plan.
@@ -74,7 +75,7 @@ edge cases are tracked in the implementation plan.
 - `X11Backend` runs system tools asynchronously, with bounded command timeouts.
 - `KWinBackend` uses asynchronous Qt D-Bus calls and talks to the PlasmaGlow
   effect through its own session-bus service.
-- The KWin effect uses `OffscreenEffect` and a GLSL shader to adjust each window.
+- The KWin effect renders the composited screen through a GLSL color shader.
 
 ## License
 

@@ -38,7 +38,7 @@ if(PLASMAGLOW_BUILD_KWIN_EFFECT)
     )
 
     target_compile_features(plasmaglow PRIVATE cxx_std_20)
-    target_link_libraries(plasmaglow PRIVATE KWin::kwin)
+    target_link_libraries(plasmaglow PRIVATE KWin::kwin KF6::ConfigCore)
 endif()
 
 # Define the Plasma applet target

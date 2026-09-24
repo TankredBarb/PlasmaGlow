@@ -4,10 +4,9 @@
 
 #pragma once
 
-#include <effect/offscreeneffect.h>
+#include <effect/effect.h>
 
 #include <QDBusConnection>
-#include <QSet>
 #include <QString>
 #include <QVariantMap>
 
@@ -17,8 +16,10 @@ namespace KWin
 {
 
 class GLShader;
+class GLTexture;
+class GLFramebuffer;
 
-class PlasmaGlowEffect final : public OffscreenEffect
+class PlasmaGlowEffect final : public Effect
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.kde.plasmaglow.Effect1")
@@ -40,20 +41,13 @@ Q_SIGNALS:
     Q_SCRIPTABLE void stateChanged(const QVariantMap &state);
 
 protected:
-    void drawWindow(const RenderTarget &renderTarget,
-                    const RenderViewport &viewport,
-                    EffectWindow *window,
-                    int mask,
-                    const Region &deviceRegion,
-                    WindowPaintData &data) override;
-
-private Q_SLOTS:
-    void handleWindowAdded(KWin::EffectWindow *window);
-    void handleWindowDeleted(KWin::EffectWindow *window);
+    void paintScreen(const RenderTarget &renderTarget,
+                     const RenderViewport &viewport,
+                     int mask,
+                     const Region &deviceRegion,
+                     LogicalOutput *screen) override;
 
 private:
-    void syncWindow(KWin::EffectWindow *window);
-    void syncAllWindows();
     QVariantMap state() const;
 
     static constexpr double kMinimumSaturation = 0.0;
@@ -66,7 +60,8 @@ private:
     const QString m_objectPath = QStringLiteral("/org/kde/PlasmaGlow");
     QDBusConnection m_sessionBus = QDBusConnection::sessionBus();
     std::unique_ptr<GLShader> m_shader;
-    QSet<KWin::EffectWindow *> m_redirectedWindows;
+    std::unique_ptr<GLTexture> m_screenTexture;
+    std::unique_ptr<GLFramebuffer> m_screenFramebuffer;
     double m_saturation = 1.0;
     double m_gamma = 1.0;
     QString m_lastError;
