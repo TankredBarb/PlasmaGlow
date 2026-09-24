@@ -11,7 +11,7 @@ PlasmaExtras.Representation {
     required property var plasmoidItem
 
     implicitWidth: Kirigami.Units.gridUnit * 20
-    implicitHeight: root.plasmoidItem.controller.hasXGamma ? Kirigami.Units.gridUnit * 18 : Kirigami.Units.gridUnit * 11
+    implicitHeight: root.plasmoidItem.controller.gammaAvailable ? Kirigami.Units.gridUnit * 18 : Kirigami.Units.gridUnit * 11
 
     collapseMarginsHint: false
 
@@ -66,9 +66,8 @@ PlasmaExtras.Representation {
             PlasmaComponents3.Button {
                 icon.name: "view-refresh"
                 flat: true
-                visible: root.plasmoidItem.controller.isX11
                 QQC2.ToolTip.visible: hovered
-                QQC2.ToolTip.text: "Refresh Connected Displays"
+                QQC2.ToolTip.text: "Refresh color correction backend"
                 onClicked: root.plasmoidItem.controller.refresh()
             }
 
@@ -76,36 +75,41 @@ PlasmaExtras.Representation {
             PlasmaComponents3.Button {
                 icon.name: "edit-undo"
                 flat: true
-                visible: root.plasmoidItem.controller.isX11
                 QQC2.ToolTip.visible: hovered
                 QQC2.ToolTip.text: "Reset to Default"
-                onClicked: {
-                    root.plasmoidItem.controller.saturation = 1.0;
-                    if (root.plasmoidItem.controller.hasXGamma) {
-                        root.plasmoidItem.controller.gamma = 1.0;
-                    }
-                }
+                onClicked: root.plasmoidItem.controller.reset()
             }
         }
 
-        // --- X11 CONTROLS CONTROLLER ---
+        PlasmaComponents3.Label {
+            Layout.fillWidth: true
+            visible: !root.plasmoidItem.controller.isX11 && root.plasmoidItem.controller.backendReady
+            text: "Global adjustment across all windows and outputs"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+        }
+
+        // --- COLOR ADJUSTMENT CONTROLS ---
         ColumnLayout {
-            id: x11Controls
+            id: adjustmentControls
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: Kirigami.Units.largeSpacing
-            visible: root.plasmoidItem.controller.isX11
 
             // --- OUTPUT SELECTOR ---
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                visible: root.plasmoidItem.controller.isX11
 
                 PlasmaComponents3.Label {
+                    Layout.fillWidth: true
                     text: "Monitor Output"
                     font.bold: true
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: Kirigami.Theme.textColor
+                    wrapMode: Text.WordWrap
                     opacity: 0.7
                 }
 
@@ -139,6 +143,7 @@ PlasmaExtras.Representation {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                enabled: root.plasmoidItem.controller.saturationAvailable
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -169,6 +174,7 @@ PlasmaExtras.Representation {
                     from: 0.0
                     to: 4.0
                     stepSize: 0.05
+                    live: true
                     value: root.plasmoidItem.controller.saturation
                     
                     onMoved: {
@@ -206,30 +212,65 @@ PlasmaExtras.Representation {
                         }
                     }
 
-                    handle: Rectangle {
-                        id: handleItem
-                        x: satSlider.leftPadding + satSlider.visualPosition * (satSlider.availableWidth - width)
+                    handle: Item {
+                        implicitWidth: Kirigami.Units.gridUnit * 2
+                        implicitHeight: Kirigami.Units.gridUnit * 2
+                        x: satSlider.leftPadding + satSlider.visualPosition * (satSlider.availableWidth - 18)
+                           - (width - 18) / 2
                         y: satSlider.topPadding + satSlider.availableHeight / 2 - height / 2
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        radius: 9
-                        color: "#ffffff"
-                        border.color: "#ff007f"
-                        border.width: 2
 
-                        // Glow aura ring
                         Rectangle {
                             anchors.centerIn: parent
-                            width: parent.width + 6
-                            height: parent.height + 6
-                            radius: width / 2
-                            color: "transparent"
-                            border.color: "#00ffff"
-                            border.width: 1.5
-                            opacity: satSlider.hovered || satSlider.pressed ? 0.9 : 0.4
-                            
-                            Behavior on opacity {
-                                NumberAnimation { duration: 150 }
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            border.color: "#ff007f"
+                            border.width: 2
+
+                            // Glow aura ring
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: parent.width + 6
+                                height: parent.height + 6
+                                radius: width / 2
+                                color: "transparent"
+                                border.color: "#00ffff"
+                                border.width: 1.5
+                                opacity: satInputArea.containsMouse || satInputArea.pressed
+                                    || satSlider.hovered || satSlider.pressed ? 0.9 : 0.4
+
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 150 }
+                                }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: satInputArea
+                        parent: satSlider
+                        anchors.fill: parent
+                        z: 100
+                        acceptedButtons: Qt.LeftButton
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: Qt.PointingHandCursor
+
+                        function updateValue(mouseX) {
+                            const fraction = Math.max(0, Math.min(1,
+                                (mouseX - satSlider.leftPadding - 9) / (satSlider.availableWidth - 18)))
+                            const position = satSlider.mirrored ? 1 - fraction : fraction
+                            root.plasmoidItem.controller.saturation = satSlider.valueAt(position)
+                        }
+
+                        onPressed: mouse => {
+                            satSlider.forceActiveFocus()
+                            updateValue(mouse.x)
+                        }
+                        onPositionChanged: mouse => {
+                            if (pressed) {
+                                updateValue(mouse.x)
                             }
                         }
                     }
@@ -240,6 +281,7 @@ PlasmaExtras.Representation {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                enabled: root.plasmoidItem.controller.saturationAvailable
 
                 PlasmaComponents3.Label {
                     text: "Presets:"
@@ -275,7 +317,8 @@ PlasmaExtras.Representation {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-                visible: root.plasmoidItem.controller.hasXGamma
+                visible: root.plasmoidItem.controller.gammaAvailable
+                enabled: root.plasmoidItem.controller.gammaAvailable
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -306,6 +349,7 @@ PlasmaExtras.Representation {
                     from: 0.1
                     to: 5.0
                     stepSize: 0.05
+                    live: true
                     value: root.plasmoidItem.controller.gamma
                     
                     onMoved: {
@@ -343,30 +387,65 @@ PlasmaExtras.Representation {
                         }
                     }
 
-                    handle: Rectangle {
-                        id: gammaHandleItem
-                        x: gammaSlider.leftPadding + gammaSlider.visualPosition * (gammaSlider.availableWidth - width)
+                    handle: Item {
+                        implicitWidth: Kirigami.Units.gridUnit * 2
+                        implicitHeight: Kirigami.Units.gridUnit * 2
+                        x: gammaSlider.leftPadding + gammaSlider.visualPosition * (gammaSlider.availableWidth - 18)
+                           - (width - 18) / 2
                         y: gammaSlider.topPadding + gammaSlider.availableHeight / 2 - height / 2
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        radius: 9
-                        color: "#ffffff"
-                        border.color: "#00ff88"
-                        border.width: 2
 
-                        // Glow aura ring
                         Rectangle {
                             anchors.centerIn: parent
-                            width: parent.width + 6
-                            height: parent.height + 6
-                            radius: width / 2
-                            color: "transparent"
-                            border.color: "#00ffff"
-                            border.width: 1.5
-                            opacity: gammaSlider.hovered || gammaSlider.pressed ? 0.9 : 0.4
-                            
-                            Behavior on opacity {
-                                NumberAnimation { duration: 150 }
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "#ffffff"
+                            border.color: "#00ff88"
+                            border.width: 2
+
+                            // Glow aura ring
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: parent.width + 6
+                                height: parent.height + 6
+                                radius: width / 2
+                                color: "transparent"
+                                border.color: "#00ffff"
+                                border.width: 1.5
+                                opacity: gammaInputArea.containsMouse || gammaInputArea.pressed
+                                    || gammaSlider.hovered || gammaSlider.pressed ? 0.9 : 0.4
+
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 150 }
+                                }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: gammaInputArea
+                        parent: gammaSlider
+                        anchors.fill: parent
+                        z: 100
+                        acceptedButtons: Qt.LeftButton
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: Qt.PointingHandCursor
+
+                        function updateValue(mouseX) {
+                            const fraction = Math.max(0, Math.min(1,
+                                (mouseX - gammaSlider.leftPadding - 9) / (gammaSlider.availableWidth - 18)))
+                            const position = gammaSlider.mirrored ? 1 - fraction : fraction
+                            root.plasmoidItem.controller.gamma = gammaSlider.valueAt(position)
+                        }
+
+                        onPressed: mouse => {
+                            gammaSlider.forceActiveFocus()
+                            updateValue(mouse.x)
+                        }
+                        onPositionChanged: mouse => {
+                            if (pressed) {
+                                updateValue(mouse.x)
                             }
                         }
                     }
@@ -409,15 +488,33 @@ PlasmaExtras.Representation {
             }
         }
 
-        // --- WAYLAND WARNING PLACEHOLDER ---
+        // --- BACKEND STATUS ---
         PlasmaExtras.PlaceholderMessage {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: !root.plasmoidItem.controller.isX11
-            
+            visible: !root.plasmoidItem.controller.backendReady || root.plasmoidItem.controller.error.length > 0
             iconName: "dialog-warning"
-            text: "X11 Session Required"
-            explanation: "PlasmaGlow controls display saturation via vibrant-cli, which is only supported under X11. Wayland sessions are not supported."
+            text: root.plasmoidItem.controller.backendReady ? "Color correction failed" : "Color correction backend unavailable"
+            explanation: root.plasmoidItem.controller.error.length > 0
+                ? root.plasmoidItem.controller.error
+                : "Use Refresh to check the backend again."
+        }
+
+        PlasmaComponents3.Label {
+            Layout.fillWidth: true
+            visible: root.plasmoidItem.controller.isX11 && !root.plasmoidItem.controller.saturationAvailable
+            text: root.plasmoidItem.controller.hasSaturation
+                ? "Saturation is unavailable: no connected display output was found."
+                : "Saturation is unavailable: vibrant-cli is not installed."
+            wrapMode: Text.Wrap
+            opacity: 0.8
+        }
+
+        PlasmaComponents3.Label {
+            Layout.fillWidth: true
+            visible: root.plasmoidItem.controller.isX11 && !root.plasmoidItem.controller.hasXGamma
+            text: "Gamma is unavailable: xgamma is not installed."
+            wrapMode: Text.Wrap
+            opacity: 0.8
         }
     }
 }

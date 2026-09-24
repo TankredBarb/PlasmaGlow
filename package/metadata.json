@@ -7,7 +7,7 @@
             }
         ],
         "Category": "Utilities",
-        "Description": "Adjust monitor color saturation using vibrant-cli",
+        "Description": "Adjust color saturation and gamma on X11 and Plasma Wayland",
         "Icon": "org.kde.plasmaglow",
         "Id": "org.kde.plasmaglow",
         "License": "GPL-2.0+",

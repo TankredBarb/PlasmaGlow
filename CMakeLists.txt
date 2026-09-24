@@ -19,9 +19,27 @@ include(FeatureSummary)
 configure_file(package/metadata.json metadata.json COPYONLY)
 
 # Find Qt6 and KF6 libraries
-find_package(Qt6 REQUIRED COMPONENTS Core Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core DBus Qml Quick)
 find_package(KF6 REQUIRED COMPONENTS CoreAddons Config)
 find_package(Plasma REQUIRED)
+
+option(PLASMAGLOW_BUILD_KWIN_EFFECT "Build the PlasmaGlow KWin effect" OFF)
+
+if(PLASMAGLOW_BUILD_KWIN_EFFECT)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    find_package(KWin REQUIRED)
+
+    kcoreaddons_add_plugin(plasmaglow
+        SOURCES
+            src/kwineffect/plasmagloweffect.h
+            src/kwineffect/plasmagloweffect.cpp
+            src/kwineffect/plasmaglow.qrc
+        INSTALL_NAMESPACE "kwin/effects/plugins"
+    )
+
+    target_compile_features(plasmaglow PRIVATE cxx_std_20)
+    target_link_libraries(plasmaglow PRIVATE KWin::kwin)
+endif()
 
 # Define the Plasma applet target
 plasma_add_applet(org.kde.plasmaglow
@@ -34,6 +52,10 @@ plasma_add_applet(org.kde.plasmaglow
     CPP_SOURCES
         src/glowcontroller.h
         src/glowcontroller.cpp
+        src/x11backend.h
+        src/x11backend.cpp
+        src/kwinbackend.h
+        src/kwinbackend.cpp
     GENERATE_APPLET_CLASS
 )
 
@@ -41,6 +63,7 @@ plasma_add_applet(org.kde.plasmaglow
 target_link_libraries(org.kde.plasmaglow
     PRIVATE
         Qt6::Core
+        Qt6::DBus
         Qt6::Qml
         Qt6::Quick
         KF6::CoreAddons

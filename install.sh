@@ -1,24 +1,24 @@
 #!/bin/bash
 # Exit on any error
 set -e
+cd "$(dirname "$(readlink -f "$0")")"
 
 echo "=== Building and Installing PlasmaGlow ==="
 
 # 1. Create build directory
 mkdir -p build
-cd build
 
 # 2. Configure with CMake using system-wide prefix
 echo "Configuring project..."
-cmake -DCMAKE_INSTALL_PREFIX=/usr ..
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/usr -DPLASMAGLOW_BUILD_KWIN_EFFECT=ON
 
 # 3. Build the plugin
 echo "Building project..."
-make -j$(nproc)
+cmake --build build -j "$(nproc)"
 
 # 4. Install the plugin and package system-wide (requires sudo)
 echo "Installing project..."
-sudo make install
+sudo cmake --install build
 
 # 5. Rebuild KDE system configuration cache and update icon cache
 echo "Rebuilding KDE sycoca cache..."

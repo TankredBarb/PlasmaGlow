@@ -1,58 +1,81 @@
 # PlasmaGlow
 
-KDE Plasma 6 widget for adjusting monitor color saturation and gamma settings under X11.
+KDE Plasma 6 applet for adjusting color saturation and gamma.
 
-## Features
+## Backends
 
-- **Monitor selection**: Lists and switches between display outputs detected via `xrandr`.
-- **Saturation control**: Adjusts color saturation via `vibrant-cli` (range: `0.0` to `4.0`, default `1.0`). Includes quick presets.
-- **Gamma control**: Adjusts monitor gamma via `xgamma` (range: `0.1` to `5.0`, default `1.0`). Appears only if `xgamma` is installed.
-- **Settings persistence**: Saves output, saturation, and gamma settings to `~/.config/plasmaglowrc` using `KF6::ConfigCore` and restores them on desktop startup.
-- **Wayland warning**: Shows a warning message and hides controls if the session is not X11.
+- **X11:** uses `vibrant-cli` for saturation on the selected output and `xgamma`
+  for gamma. Outputs are detected with `xrandr`.
+- **Plasma Wayland:** uses the PlasmaGlow KWin effect for global correction
+  across windows and outputs. It does not offer per-output or per-application
+  controls.
+
+Both backends keep the saturation and gamma values in the current Linux user's
+KDE config file, `plasmaglowrc` under `$XDG_CONFIG_HOME` (normally
+`~/.config/plasmaglowrc`). Each account has its own settings; a system-wide
+installation shares the applet and effect binaries, not user preferences. The
+same account reuses its values across X11 and Wayland sessions, and the applet
+applies the saved pair when that session's backend is ready. Changes are saved
+after a short delay, and pending changes are saved when the applet closes. The
+effect performs correction per window before final composition,
+so transparent surfaces may differ from a correction applied to the final
+output. Initial shader behavior targets SDR; HDR and wide-gamut behavior are
+unconfirmed.
 
 ## Requirements
 
 - KDE Plasma 6
-- X11 session
-- `vibrant-cli`
-- `xgamma`
-- `xrandr`
+- For X11: `vibrant-cli`, `xgamma`, and `xrandr`
+- For Wayland: KWin with support for third-party effects
 
-### Build Dependencies
+### Build dependencies
 
 - CMake (>= 3.16)
-- Extra CMake Modules (ECM) (>= 6.0.0)
-- Qt6 (Core, Qml, Quick, Svg)
-- KF6 (CoreAddons, Config)
-- Plasma 6 development headers
+- Extra CMake Modules (ECM)
+- Qt 6 Core, DBus, Qml, Quick, and Svg development packages
+- KF6 CoreAddons and Config development packages
+- Plasma 6 development packages
+- To build the KWin effect: KWin development packages and Qt 6 Widgets
 
-## Installation
+## Build and install
 
-The widget compiles a C++ backend plugin and registers the package. The installation must be system-wide under `/usr` so that Plasmashell can load the compiled shared library.
+The installation script builds and installs both the applet and effect. It needs
+the KWin development packages and permission to install under `/usr`:
 
-Run the installation script:
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
-*(Requires sudo to write to `/usr/lib/qt6/plugins/plasma/applets/` and `/usr/share/plasma/plasmoids/`)*
 
-If plasmashell does not load the new plugin automatically, restart it:
-```bash
-systemctl --user restart plasma-plasmashell
-```
+To build only the applet, configure with
+`-DPLASMAGLOW_BUILD_KWIN_EFFECT=OFF`. This keeps an X11-only build independent of
+KWin development headers. To build the full Wayland implementation, use
+`-DPLASMAGLOW_BUILD_KWIN_EFFECT=ON`.
 
-## Adding the Widget
+If Plasma does not discover the updated applet automatically, restart plasmashell.
+KWin loads native effect code into its process; restart the Wayland session after
+replacing an already loaded effect binary.
 
-1. Right-click on the panel or desktop and select **Add Widgets...**
+## Add the widget
+
+1. Open **Add Widgets...** from the panel or desktop.
 2. Find **PlasmaGlow**.
-3. Drag it to the panel or double-click to add.
+3. Add it to the panel or desktop.
 
-## Technical Details
+In a Wayland session, the applet checks for and loads its own KWin effect when it
+starts. Use Refresh to retry if the effect is unavailable. The user confirmed in
+a live Wayland session that gamma, presets, and grayscale at zero saturation
+work, and that saved settings survive a session restart. Additional rendering
+edge cases are tracked in the implementation plan.
 
-- **Backend**: The `GlowController` class (`src/glowcontroller.cpp`) is registered as a QML element. It calls external utilities (`vibrant-cli`, `xgamma`, `xrandr`) asynchronously using `QProcess`.
-- **Persistence**: Configuration is written directly to `~/.config/plasmaglowrc` inside the C++ setter methods and read back during construction, avoiding QML binding loops at startup.
+## Technical details
+
+- `GlowController` owns settings and the QML properties.
+- `X11Backend` runs system tools asynchronously, with bounded command timeouts.
+- `KWinBackend` uses asynchronous Qt D-Bus calls and talks to the PlasmaGlow
+  effect through its own session-bus service.
+- The KWin effect uses `OffscreenEffect` and a GLSL shader to adjust each window.
 
 ## License
 
-GPL-2.0+ (see `package/metadata.json`).
+GPL-2.0-or-later (see the package metadata and source headers).
