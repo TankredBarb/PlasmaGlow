@@ -9,6 +9,8 @@ PlasmaExtras.Representation {
     id: root
 
     required property var plasmoidItem
+    readonly property color themeTextColor: Kirigami.Theme.textColor
+    readonly property bool lightTheme: themeTextColor.r * 0.2126 + themeTextColor.g * 0.7152 + themeTextColor.b * 0.0722 < 0.5
 
     implicitWidth: Kirigami.Units.gridUnit * 20
     implicitHeight: root.plasmoidItem.controller.gammaAvailable ? Kirigami.Units.gridUnit * 18 : Kirigami.Units.gridUnit * 11
@@ -26,7 +28,7 @@ PlasmaExtras.Representation {
             spacing: Kirigami.Units.smallSpacing
 
             Image {
-                source: "icon.svg"
+                source: root.lightTheme ? "icon-light.svg" : "icon.svg"
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 1.5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 1.5
                 fillMode: Image.PreserveAspectFit

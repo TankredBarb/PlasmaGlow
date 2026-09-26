@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
     <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#3b3b3d"/>
-      <stop offset="1" stop-color="#252527"/>
+      <stop offset="0" stop-color="#e5e5e5"/>
+      <stop offset="1" stop-color="#c9c9c9"/>
     </linearGradient>
     <linearGradient id="redOrange" gradientUnits="userSpaceOnUse" x1="32" y1="13" x2="45.435" y2="18.565">
       <stop stop-color="#ff536a"/><stop offset="1" stop-color="#ff9b43"/>
@@ -41,5 +41,5 @@
     <path d="M13.001 32.166 A19 19 0 0 1 18.683 18.448" stroke="url(#violetMagenta)"/>
     <path d="M18.448 18.683 A19 19 0 0 1 32.166 13.001" stroke="url(#magentaRed)"/>
   </g>
-  <path d="M32 20 C33.7 27.3 36.7 30.3 44 32 C36.7 33.7 33.7 36.7 32 44 C30.3 36.7 27.3 33.7 20 32 C27.3 30.3 30.3 27.3 32 20Z" fill="#fff"/>
+  <path d="M32 20 C33.7 27.3 36.7 30.3 44 32 C36.7 33.7 33.7 36.7 32 44 C30.3 36.7 27.3 33.7 20 32 C27.3 30.3 30.3 27.3 32 20Z" fill="#252044"/>
 </svg>

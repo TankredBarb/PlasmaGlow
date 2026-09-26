@@ -6,6 +6,8 @@ Item {
     id: root
 
     required property PlasmoidItem plasmoidItem
+    readonly property color themeTextColor: Kirigami.Theme.textColor
+    readonly property bool lightTheme: themeTextColor.r * 0.2126 + themeTextColor.g * 0.7152 + themeTextColor.b * 0.0722 < 0.5
 
     implicitWidth: Kirigami.Units.gridUnit * 2
     implicitHeight: Kirigami.Units.gridUnit * 2
@@ -36,7 +38,7 @@ Item {
         Image {
             id: iconImage
             anchors.fill: parent
-            source: "icon.svg"
+            source: root.lightTheme ? "icon-light.svg" : "icon.svg"
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true

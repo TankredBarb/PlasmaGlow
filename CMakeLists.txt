@@ -53,6 +53,7 @@ plasma_add_applet(org.kde.plasmaglow
         package/contents/ui/FullRepresentation.qml
     RESOURCES
         package/contents/images/icon.svg
+        package/contents/images/icon-light.svg
     CPP_SOURCES
         src/glowcontroller.h
         src/glowcontroller.cpp
