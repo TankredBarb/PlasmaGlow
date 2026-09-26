@@ -29,6 +29,7 @@ class GlowController : public QObject
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(double appliedSaturation READ appliedSaturation NOTIFY appliedStateChanged)
     Q_PROPERTY(double appliedGamma READ appliedGamma NOTIFY appliedStateChanged)
+    Q_PROPERTY(bool applyToLogin READ applyToLogin WRITE setApplyToLogin NOTIFY applyToLoginChanged)
 
 public:
     explicit GlowController(QObject *parent = nullptr);
@@ -43,6 +44,8 @@ public:
     QString error() const;
     double appliedSaturation() const;
     double appliedGamma() const;
+    bool applyToLogin() const;
+    void setApplyToLogin(bool enabled);
 
     double saturation() const;
     void setSaturation(double value);
@@ -63,6 +66,7 @@ Q_SIGNALS:
     void errorChanged();
     void capabilitiesChanged();
     void appliedStateChanged();
+    void applyToLoginChanged();
 
 public Q_SLOTS:
     void refresh();
@@ -91,6 +95,7 @@ private:
     bool m_initialSaturationApplied = false;
     bool m_localApplyPending = false;
     bool m_refreshPendingX11 = false;
+    bool m_applyToLogin = true;
     double m_appliedSaturation = 1.0;
     double m_appliedGamma = 1.0;
     quint64 m_latestApplyRequestId = 0;

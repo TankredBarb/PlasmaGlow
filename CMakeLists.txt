@@ -23,6 +23,10 @@ find_package(Qt6 REQUIRED COMPONENTS Core DBus Qml Quick)
 find_package(KF6 REQUIRED COMPONENTS CoreAddons Config)
 find_package(Plasma REQUIRED)
 
+add_executable(plasmaglow-login-snapshot src/loginsettingssnapshot.cpp)
+target_link_libraries(plasmaglow-login-snapshot PRIVATE Qt6::Core KF6::ConfigCore)
+install(TARGETS plasmaglow-login-snapshot DESTINATION ${KDE_INSTALL_LIBEXECDIR})
+
 option(PLASMAGLOW_BUILD_KWIN_EFFECT "Build the PlasmaGlow KWin effect" OFF)
 
 if(PLASMAGLOW_BUILD_KWIN_EFFECT)

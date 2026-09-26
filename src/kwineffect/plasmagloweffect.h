@@ -67,6 +67,7 @@ private:
     QString m_lastError;
     bool m_dbusServiceRegistered = false;
     bool m_dbusRegistered = false;
+    bool m_isGreeter = false;
 };
 
 } // namespace KWin

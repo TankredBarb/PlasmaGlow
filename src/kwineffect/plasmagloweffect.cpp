@@ -14,6 +14,7 @@
 #include <QDBusConnection>
 #include <QDebug>
 #include <KConfigGroup>
+#include <KConfig>
 #include <KSharedConfig>
 
 #include <cmath>
@@ -30,9 +31,14 @@ PlasmaGlowEffect::PlasmaGlowEffect()
 {
     ensureResources();
 
-    const KConfigGroup settings(KSharedConfig::openConfig(QStringLiteral("plasmaglowrc")), QStringLiteral("General"));
-    const double savedSaturation = settings.readEntry(QStringLiteral("saturation"), 1.0);
-    const double savedGamma = settings.readEntry(QStringLiteral("gamma"), 1.0);
+    m_isGreeter = qEnvironmentVariable("XDG_SESSION_CLASS") == QLatin1String("greeter");
+    const auto config = m_isGreeter
+        ? KSharedConfig::openConfig(QStringLiteral("/etc/xdg/plasmaglow-loginrc"), KConfig::SimpleConfig)
+        : KSharedConfig::openConfig(QStringLiteral("plasmaglowrc"));
+    const KConfigGroup settings(config, QStringLiteral("General"));
+    const bool enabled = !m_isGreeter || settings.readEntry(QStringLiteral("enabled"), false);
+    const double savedSaturation = enabled ? settings.readEntry(QStringLiteral("saturation"), 1.0) : 1.0;
+    const double savedGamma = enabled ? settings.readEntry(QStringLiteral("gamma"), 1.0) : 1.0;
     if (std::isfinite(savedSaturation) && savedSaturation >= kMinimumSaturation && savedSaturation <= kMaximumSaturation) {
         m_saturation = savedSaturation;
     }
@@ -57,14 +63,16 @@ PlasmaGlowEffect::PlasmaGlowEffect()
         }
     }
 
-    m_dbusServiceRegistered = m_sessionBus.registerService(m_dbusService);
-    if (m_dbusServiceRegistered) {
-        m_dbusRegistered = m_sessionBus.registerObject(
-            m_objectPath,
-            this,
-            QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals);
+    if (!m_isGreeter) {
+        m_dbusServiceRegistered = m_sessionBus.registerService(m_dbusService);
+        if (m_dbusServiceRegistered) {
+            m_dbusRegistered = m_sessionBus.registerObject(
+                m_objectPath,
+                this,
+                QDBusConnection::ExportScriptableSlots | QDBusConnection::ExportScriptableSignals);
+        }
     }
-    if (!m_dbusRegistered) {
+    if (!m_isGreeter && !m_dbusRegistered) {
         m_lastError = m_dbusServiceRegistered
             ? QStringLiteral("Failed to register the PlasmaGlow D-Bus endpoint")
             : QStringLiteral("Failed to register the PlasmaGlow D-Bus service");
@@ -91,7 +99,8 @@ bool PlasmaGlowEffect::supported()
 
 bool PlasmaGlowEffect::isActive() const
 {
-    return m_dbusRegistered && m_shader && (m_saturation != 1.0 || m_gamma != 1.0);
+    return (m_isGreeter || m_dbusRegistered) && m_shader
+        && (m_saturation != 1.0 || m_gamma != 1.0);
 }
 
 int PlasmaGlowEffect::requestedEffectChainPosition() const

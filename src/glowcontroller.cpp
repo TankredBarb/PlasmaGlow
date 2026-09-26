@@ -19,6 +19,7 @@ constexpr double maximumGamma = 5.0;
 constexpr unsigned outputSetting = 1;
 constexpr unsigned saturationSetting = 2;
 constexpr unsigned gammaSetting = 4;
+constexpr unsigned loginSetting = 8;
 
 double readSetting(KConfigGroup &group, const QString &key, double fallback, double minimum, double maximum)
 {
@@ -35,6 +36,7 @@ GlowController::GlowController(QObject *parent)
     m_output = group.readEntry(QStringLiteral("output"), QString());
     m_saturation = readSetting(group, QStringLiteral("saturation"), 1.0, minimumSaturation, maximumSaturation);
     m_gamma = readSetting(group, QStringLiteral("gamma"), 1.0, minimumGamma, maximumGamma);
+    m_applyToLogin = group.readEntry(QStringLiteral("applyToLogin"), true);
     m_saveTimer = new QTimer(this);
     m_saveTimer->setSingleShot(true);
     connect(m_saveTimer, &QTimer::timeout, this, &GlowController::flushSettings);
@@ -223,6 +225,21 @@ double GlowController::appliedSaturation() const
 double GlowController::appliedGamma() const
 {
     return m_appliedGamma;
+}
+
+bool GlowController::applyToLogin() const
+{
+    return m_applyToLogin;
+}
+
+void GlowController::setApplyToLogin(bool enabled)
+{
+    if (m_applyToLogin == enabled) {
+        return;
+    }
+    m_applyToLogin = enabled;
+    Q_EMIT applyToLoginChanged();
+    saveSettings(loginSetting);
 }
 
 double GlowController::saturation() const
@@ -419,6 +436,9 @@ void GlowController::flushSettings()
     }
     if (m_dirtySettings & gammaSetting) {
         group.writeEntry(QStringLiteral("gamma"), m_gamma);
+    }
+    if (m_dirtySettings & loginSetting) {
+        group.writeEntry(QStringLiteral("applyToLogin"), m_applyToLogin);
     }
     if (group.sync()) {
         m_dirtySettings = 0;

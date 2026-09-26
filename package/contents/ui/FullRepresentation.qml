@@ -90,6 +90,14 @@ PlasmaExtras.Representation {
             opacity: 0.7
         }
 
+        PlasmaComponents3.CheckBox {
+            Layout.fillWidth: true
+            visible: !root.plasmoidItem.controller.isX11
+            text: "Use my colors on the login screen"
+            checked: root.plasmoidItem.controller.applyToLogin
+            onToggled: root.plasmoidItem.controller.applyToLogin = checked
+        }
+
         // --- COLOR ADJUSTMENT CONTROLS ---
         ColumnLayout {
             id: adjustmentControls

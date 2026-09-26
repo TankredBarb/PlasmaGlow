@@ -21,6 +21,29 @@ effect processes the composited screen, including newly opened windows and
 transparent surfaces. Initial shader behavior targets SDR; HDR and wide-gamut
 behavior are unconfirmed.
 
+## Wayland login screen
+
+SDDM can use the PlasmaGlow effect when its greeter runs on Wayland with
+`kwin_wayland`. Each user keeps their own `plasmaglowrc`. An optional SDDM PAM
+session hook reads the signing-in user's settings at login and again at logout,
+then writes a snapshot to `/etc/xdg/plasmaglow-loginrc`. The greeter KWin reads
+only this snapshot. Each user's KWin continues to read only that user's own
+`plasmaglowrc`. When the last user unchecks **Use my colors on the login screen**,
+the snapshot contains neutral saturation and gamma (1.0/1.0), and the greeter
+effect stays inactive. A later user with the checkbox enabled replaces that
+snapshot with their own values at login and logout.
+
+After installing the `plasmaglow-login-snapshot` helper, run
+`sudo sh scripts/enable-sddm-login-snapshot.sh`. It backs up and adds these
+lines to `/etc/pam.d/sddm` and `/etc/pam.d/sddm-autologin`:
+
+```text
+session optional pam_exec.so type=open_session /usr/lib/libexec/plasmaglow-login-snapshot
+session optional pam_exec.so type=close_session /usr/lib/libexec/plasmaglow-login-snapshot
+```
+
+SDDM also needs `DisplayServer=wayland` and a KWin `CompositorCommand`.
+
 ## Requirements
 
 - KDE Plasma 6
