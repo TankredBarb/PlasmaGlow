@@ -16,6 +16,7 @@
 namespace KWin
 {
 
+class ItemEffect;
 class GLShader;
 class GLTexture;
 class GLFramebuffer;
@@ -30,6 +31,7 @@ public:
     ~PlasmaGlowEffect() override;
 
     bool isActive() const override;
+    bool blocksDirectScanout() const override;
     int requestedEffectChainPosition() const override;
 
     static bool supported();
@@ -54,6 +56,7 @@ protected:
 private:
     QVariantMap state() const;
     bool ensureSharpeningShader();
+    void updateSceneEffect();
 
     static constexpr double kMinimumSaturation = 0.0;
     static constexpr double kMaximumSaturation = 4.0;
@@ -64,6 +67,7 @@ private:
     const QString m_dbusService = QStringLiteral("org.kde.PlasmaGlow");
     const QString m_objectPath = QStringLiteral("/org/kde/PlasmaGlow");
     QDBusConnection m_sessionBus = QDBusConnection::sessionBus();
+    std::unique_ptr<ItemEffect> m_sceneEffect;
     std::unique_ptr<GLShader> m_shader;
     std::unique_ptr<GLShader> m_sharpeningShader;
     struct ScreenCapture {

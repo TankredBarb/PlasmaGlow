@@ -5,6 +5,8 @@
 #include "plasmagloweffect.h"
 
 #include <effect/effecthandler.h>
+#include <scene/item.h>
+#include <scene/workspacescene.h>
 #include <core/rendertarget.h>
 #include <core/output.h>
 #include <core/renderviewport.h>
@@ -103,6 +105,7 @@ PlasmaGlowEffect::PlasmaGlowEffect()
         effects->makeOpenGLContextCurrent();
         m_screenCaptures.erase(screen);
     });
+    updateSceneEffect();
     effects->addRepaintFull();
 }
 
@@ -146,6 +149,23 @@ bool PlasmaGlowEffect::isActive() const
 {
     return (m_isGreeter || m_dbusRegistered) && m_shader
         && (m_saturation != 1.0 || m_gamma != 1.0 || m_sharpeningMode != QLatin1String("off"));
+}
+
+bool PlasmaGlowEffect::blocksDirectScanout() const
+{
+    return false;
+}
+
+void PlasmaGlowEffect::updateSceneEffect()
+{
+    // Keep windows in the corrected scene while allowing a separate cursor plane.
+    if (isActive()) {
+        if (!m_sceneEffect) {
+            m_sceneEffect = std::make_unique<ItemEffect>(effects->scene()->containerItem());
+        }
+    } else {
+        m_sceneEffect.reset();
+    }
 }
 
 int PlasmaGlowEffect::requestedEffectChainPosition() const
@@ -220,6 +240,7 @@ bool PlasmaGlowEffect::setAllParameters(double saturation, double gamma, const Q
     m_sharpeningMode = sharpeningMode;
     m_sharpeningStrength = sharpeningStrength;
     m_sharpeningDenoise = sharpeningDenoise;
+    updateSceneEffect();
     if (repaint) {
         effects->addRepaintFull();
     }
