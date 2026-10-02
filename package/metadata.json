@@ -3,7 +3,8 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "Tankred"
+                "Name": "Tankred",
+                "Email": "tankred666@gmail.com"
             }
         ],
         "Category": "Utilities",
@@ -12,7 +13,7 @@
         "Id": "org.kde.plasmaglow",
         "License": "GPL-2.0+",
         "Name": "PlasmaGlow",
-        "Version": "1.0.0"
+        "Version": "0.4"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

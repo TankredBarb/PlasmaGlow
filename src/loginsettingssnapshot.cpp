@@ -39,7 +39,8 @@ int main(int argc, char **argv)
         + QStringLiteral("/.config/plasmaglowrc");
     const KConfigGroup settings(KSharedConfig::openConfig(configPath, KConfig::SimpleConfig),
                                 QStringLiteral("General"));
-    const bool enabled = settings.readEntry(QStringLiteral("applyToLogin"), true);
+    const bool enabled = settings.readEntry(QStringLiteral("applyToLogin"), true)
+        && settings.readEntry(QStringLiteral("adjustmentsEnabled"), true);
     const double savedSaturation = settings.readEntry(QStringLiteral("saturation"), 1.0);
     const double savedGamma = settings.readEntry(QStringLiteral("gamma"), 1.0);
     const double saturation = std::isfinite(savedSaturation) && savedSaturation >= 0.0 && savedSaturation <= 4.0

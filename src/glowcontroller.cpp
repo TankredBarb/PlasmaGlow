@@ -4,6 +4,8 @@
 #include "x11backend.h"
 
 #include <QGuiApplication>
+#include <KAboutApplicationDialog>
+#include <KAboutData>
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QTimer>
@@ -21,6 +23,7 @@ constexpr unsigned saturationSetting = 2;
 constexpr unsigned gammaSetting = 4;
 constexpr unsigned loginSetting = 8;
 constexpr unsigned sharpeningSetting = 16;
+constexpr unsigned enabledSetting = 32;
 
 double readSetting(KConfigGroup &group, const QString &key, double fallback, double minimum, double maximum)
 {
@@ -44,6 +47,7 @@ GlowController::GlowController(QObject *parent)
     m_sharpeningStrength = readSetting(group, QStringLiteral("sharpeningStrength"), 0.5, 0.0, 1.0);
     m_sharpeningDenoise = readSetting(group, QStringLiteral("sharpeningDenoise"), 0.17, 0.0, 1.0);
     m_applyToLogin = group.readEntry(QStringLiteral("applyToLogin"), true);
+    m_adjustmentsEnabled = group.readEntry(QStringLiteral("adjustmentsEnabled"), true);
     m_saveTimer = new QTimer(this);
     m_saveTimer->setSingleShot(true);
     connect(m_saveTimer, &QTimer::timeout, this, &GlowController::flushSettings);
@@ -81,7 +85,7 @@ GlowController::GlowController(QObject *parent)
                 m_appliedSharpeningDenoise = denoise;
                 changed = true;
             }
-            if (!m_localApplyPending
+            if (m_adjustmentsEnabled && !m_localApplyPending
                 && (!qFuzzyCompare(m_saturation, saturation) || !qFuzzyCompare(m_gamma, gamma)
                     || m_sharpeningMode != mode || !qFuzzyCompare(m_sharpeningStrength, strength)
                     || !qFuzzyCompare(m_sharpeningDenoise, denoise))) {
@@ -155,7 +159,7 @@ GlowController::GlowController(QObject *parent)
         if (!success || output != m_output || requestId != m_saturationReadRequestId) {
             return;
         }
-        if (!qFuzzyCompare(m_saturation, value)) {
+        if (m_adjustmentsEnabled && !qFuzzyCompare(m_saturation, value)) {
             m_saturation = value;
             Q_EMIT saturationChanged();
             saveSettings(saturationSetting);
@@ -170,7 +174,7 @@ GlowController::GlowController(QObject *parent)
         if (!success || requestId != m_gammaReadRequestId) {
             return;
         }
-        if (!qFuzzyCompare(m_gamma, value)) {
+        if (m_adjustmentsEnabled && !qFuzzyCompare(m_gamma, value)) {
             m_gamma = value;
             Q_EMIT gammaChanged();
             saveSettings(gammaSetting);
@@ -203,6 +207,7 @@ GlowController::GlowController(QObject *parent)
 
 GlowController::~GlowController()
 {
+    delete m_aboutDialog.data();
     flushSettings();
 }
 
@@ -264,6 +269,51 @@ void GlowController::setApplyToLogin(bool enabled)
     m_applyToLogin = enabled;
     Q_EMIT applyToLoginChanged();
     saveSettings(loginSetting);
+}
+
+bool GlowController::adjustmentsEnabled() const
+{
+    return m_adjustmentsEnabled;
+}
+
+void GlowController::setAdjustmentsEnabled(bool enabled)
+{
+    if (m_adjustmentsEnabled == enabled) {
+        return;
+    }
+    m_adjustmentsEnabled = enabled;
+    ++m_userActionRevision;
+    ++m_saturationReadRequestId;
+    ++m_gammaReadRequestId;
+    Q_EMIT adjustmentsEnabledChanged();
+    saveSettings(enabledSetting);
+    if (m_kwinBackend) {
+        applyWaylandParameters(m_saturation, m_gamma);
+    } else {
+        applySaturation(m_saturation);
+        applyGamma(m_gamma);
+    }
+}
+
+void GlowController::showAboutDialog()
+{
+    if (!m_aboutDialog) {
+        KAboutData about(QStringLiteral("plasmaglow"), QStringLiteral("PlasmaGlow"),
+                         QStringLiteral(PLASMAGLOW_VERSION),
+                         QStringLiteral("Color adjustment and global sharpening for KDE Plasma"),
+                         KAboutLicense::GPL_V2);
+        about.addAuthor(QStringLiteral("Tankred"), QString(), QStringLiteral("tankred666@gmail.com"));
+        about.setBugAddress(QByteArrayLiteral("tankred666@gmail.com"));
+        about.setLicense(KAboutLicense::GPL_V2, KAboutLicense::OrLaterVersions);
+        about.setDesktopFileName(QStringLiteral("org.kde.plasmaglow"));
+        about.setHomepage(QStringLiteral("https://github.com/TankredBarb/PlasmaGlow"));
+        about.setOtherText(QStringLiteral("<img width=\"512\" height=\"341\" src=\":/plasmaglow/about.png\"/>"));
+        m_aboutDialog = new KAboutApplicationDialog(about);
+        m_aboutDialog->setAttribute(Qt::WA_DeleteOnClose);
+    }
+    m_aboutDialog->show();
+    m_aboutDialog->raise();
+    m_aboutDialog->activateWindow();
 }
 
 double GlowController::saturation() const
@@ -409,7 +459,11 @@ void GlowController::setOutput(const QString &output)
     saveSettings(outputSetting);
 
     if (m_x11Backend && m_hasSaturation) {
-        m_x11Backend->querySaturation(m_output, ++m_saturationReadRequestId);
+        if (m_adjustmentsEnabled) {
+            m_x11Backend->querySaturation(m_output, ++m_saturationReadRequestId);
+        } else {
+            applySaturation(m_saturation);
+        }
     }
 }
 
@@ -423,6 +477,9 @@ void GlowController::refresh()
     if (m_kwinBackend) {
         m_localApplyPending = false;
         m_kwinBackend->refresh();
+        if (!m_adjustmentsEnabled) {
+            applyWaylandParameters(m_saturation, m_gamma);
+        }
         return;
     }
     if (!m_x11Backend) {
@@ -501,7 +558,7 @@ void GlowController::applySaturation(double value)
         return;
     }
     if (m_x11Backend && m_hasSaturation && !m_output.isEmpty()) {
-        m_x11Backend->applySaturation(m_output, value);
+        m_x11Backend->applySaturation(m_output, m_adjustmentsEnabled ? value : 1.0);
     }
 }
 
@@ -516,7 +573,7 @@ void GlowController::applyGamma(double value)
         return;
     }
     if (m_x11Backend && m_hasXGamma) {
-        m_x11Backend->applyGamma(value);
+        m_x11Backend->applyGamma(m_adjustmentsEnabled ? value : 1.0);
     }
 }
 
@@ -544,6 +601,9 @@ void GlowController::flushSettings()
     }
     if (m_dirtySettings & loginSetting) {
         group.writeEntry(QStringLiteral("applyToLogin"), m_applyToLogin);
+    }
+    if (m_dirtySettings & enabledSetting) {
+        group.writeEntry(QStringLiteral("adjustmentsEnabled"), m_adjustmentsEnabled);
     }
     if (m_dirtySettings & sharpeningSetting) {
         group.writeEntry(QStringLiteral("sharpeningMode"), m_sharpeningMode);
@@ -641,6 +701,8 @@ void GlowController::applyWaylandParameters(double saturation, double gamma)
         return;
     }
     m_localApplyPending = true;
-    m_latestApplyRequestId = m_kwinBackend->applyParameters(saturation, gamma, m_sharpeningMode,
+    m_latestApplyRequestId = m_kwinBackend->applyParameters(m_adjustmentsEnabled ? saturation : 1.0,
+                                                            m_adjustmentsEnabled ? gamma : 1.0,
+                                                            m_adjustmentsEnabled ? m_sharpeningMode : QStringLiteral("off"),
                                                             m_sharpeningStrength, m_sharpeningDenoise);
 }

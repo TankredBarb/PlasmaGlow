@@ -21,6 +21,15 @@ effect processes the composited screen, including newly opened windows and
 transparent surfaces. Initial shader behavior targets SDR; HDR and wide-gamut
 behavior are unconfirmed.
 
+The menu's **Enable adjustments** checkbox disables color adjustment and sharpening
+without changing the saved values. Checking it again restores those values. The
+checkbox state survives restarts and also gates color correction on the login screen.
+**About PlasmaGlow** opens KDE's standard application information dialog.
+
+Controller regression tests can be enabled with `-DPLASMAGLOW_BUILD_TESTS=ON`
+and run with `ctest --test-dir build --output-on-failure`. They use an isolated
+D-Bus session and temporary settings.
+
 ## Sharpening
 
 On Plasma Wayland, the **Sharpening** section selects **Off**, **CAS**, or
@@ -98,12 +107,12 @@ SDDM also needs `DisplayServer=wayland` and a KWin `CompositorCommand`.
 
 ### Build dependencies
 
-- CMake (>= 3.16)
+- CMake (>= 3.19)
 - Extra CMake Modules (ECM)
-- Qt 6 Core, DBus, Qml, Quick, and Svg development packages
-- KF6 CoreAddons and Config development packages
+- Qt 6 Core, DBus, Qml, Quick, Widgets, and Svg development packages
+- KF6 CoreAddons, Config, and XmlGui development packages
 - Plasma 6 development packages
-- To build the KWin effect: KWin development packages and Qt 6 Widgets
+- To build the KWin effect: KWin development packages
 
 ## Build and install
 

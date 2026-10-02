@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 #include <QtQml/QQmlEngine>
@@ -11,6 +12,7 @@
 class X11Backend;
 class KWinBackend;
 class QTimer;
+class QDialog;
 
 class GlowController : public QObject
 {
@@ -37,6 +39,7 @@ class GlowController : public QObject
     Q_PROPERTY(double appliedSharpeningStrength READ appliedSharpeningStrength NOTIFY appliedStateChanged)
     Q_PROPERTY(double appliedSharpeningDenoise READ appliedSharpeningDenoise NOTIFY appliedStateChanged)
     Q_PROPERTY(bool applyToLogin READ applyToLogin WRITE setApplyToLogin NOTIFY applyToLoginChanged)
+    Q_PROPERTY(bool adjustmentsEnabled READ adjustmentsEnabled WRITE setAdjustmentsEnabled NOTIFY adjustmentsEnabledChanged)
 
 public:
     explicit GlowController(QObject *parent = nullptr);
@@ -53,6 +56,8 @@ public:
     double appliedGamma() const;
     bool applyToLogin() const;
     void setApplyToLogin(bool enabled);
+    bool adjustmentsEnabled() const;
+    void setAdjustmentsEnabled(bool enabled);
 
     double saturation() const;
     void setSaturation(double value);
@@ -86,10 +91,12 @@ Q_SIGNALS:
     void capabilitiesChanged();
     void appliedStateChanged();
     void applyToLoginChanged();
+    void adjustmentsEnabledChanged();
 
 public Q_SLOTS:
     void refresh();
     void reset();
+    void showAboutDialog();
     void applySaturation(double value);
     void applyGamma(double value);
 
@@ -121,6 +128,8 @@ private:
     bool m_localApplyPending = false;
     bool m_refreshPendingX11 = false;
     bool m_applyToLogin = true;
+    bool m_adjustmentsEnabled = true;
+    QPointer<QDialog> m_aboutDialog;
     double m_appliedSaturation = 1.0;
     double m_appliedGamma = 1.0;
     quint64 m_latestApplyRequestId = 0;

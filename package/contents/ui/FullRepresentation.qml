@@ -21,8 +21,34 @@ PlasmaExtras.Representation {
     Layout.maximumHeight: implicitHeight
     collapseMarginsHint: false
 
+    onVisibleChanged: {
+        if (!visible) {
+            optionsMenu.close()
+        }
+    }
+
+    Connections {
+        target: root.plasmoidItem
+        function onExpandedChanged() {
+            if (!root.plasmoidItem.expanded) {
+                optionsMenu.close()
+            }
+        }
+    }
+
     function valueColor(accent) {
         return lightTheme ? Qt.darker(accent, 1.6) : Qt.lighter(accent, 1.15)
+    }
+
+    component SettingLabel: PlasmaComponents3.Label {
+        id: label
+        required property string helpText
+
+        HoverHandler { id: labelHover }
+        PlasmaComponents3.ToolTip {
+            visible: root.visible && label.visible && labelHover.hovered && !optionsMenu.visible
+            text: label.helpText
+        }
     }
 
     component NeonSlider: QQC2.Slider {
@@ -163,20 +189,85 @@ PlasmaExtras.Representation {
         }
     }
 
+    QQC2.Action {
+        id: resetAction
+        text: "Reset to Default"
+        icon.name: "edit-undo"
+        onTriggered: root.plasmoidItem.controller.reset()
+    }
+
     QQC2.Menu {
         id: optionsMenu
         objectName: "optionsMenu"
+
+        component IconMenuItem: QQC2.MenuItem {
+            id: menuItem
+            required property string iconName
+
+            contentItem: PlasmaComponents3.Label {
+                text: menuItem.text
+                font: menuItem.font
+                leftPadding: loginColorsItem.indicator.width + menuItem.spacing
+                verticalAlignment: Text.AlignVCenter
+            }
+            indicator: Item {
+                x: menuItem.leftPadding
+                y: menuItem.topPadding + (menuItem.availableHeight - height) / 2
+                width: loginColorsItem.indicator.width
+                height: loginColorsItem.indicator.height
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    width: Kirigami.Units.iconSizes.small
+                    height: width
+                    source: menuItem.iconName
+                }
+            }
+        }
+
         QQC2.MenuItem {
+            id: enableAdjustmentsItem
+            objectName: "enableAdjustmentsItem"
+            text: "Enable adjustments"
+            checkable: true
+            checked: root.plasmoidItem.controller.adjustmentsEnabled
+            contentItem: PlasmaComponents3.Label {
+                text: enableAdjustmentsItem.text
+                font: enableAdjustmentsItem.font
+                leftPadding: loginColorsItem.indicator.width + enableAdjustmentsItem.spacing
+                verticalAlignment: Text.AlignVCenter
+            }
+            onTriggered: root.plasmoidItem.controller.adjustmentsEnabled = checked
+        }
+        QQC2.MenuItem {
+            id: loginColorsItem
             text: "Colors on login screen"
             visible: !root.plasmoidItem.controller.isX11
             checkable: true
             checked: root.plasmoidItem.controller.applyToLogin
+            contentItem: PlasmaComponents3.Label {
+                text: loginColorsItem.text
+                font: loginColorsItem.font
+                leftPadding: loginColorsItem.indicator.width + loginColorsItem.spacing
+                verticalAlignment: Text.AlignVCenter
+            }
             onTriggered: root.plasmoidItem.controller.applyToLogin = checked
         }
-        QQC2.MenuItem {
+        IconMenuItem {
             text: "Refresh"
-            icon.name: "view-refresh"
+            iconName: "view-refresh"
             onTriggered: root.plasmoidItem.controller.refresh()
+        }
+        IconMenuItem {
+            objectName: "resetMenuItem"
+            action: resetAction
+            iconName: resetAction.icon.name
+        }
+        QQC2.MenuSeparator {}
+        IconMenuItem {
+            objectName: "aboutMenuItem"
+            text: "About PlasmaGlow"
+            iconName: "help-about"
+            onTriggered: root.plasmoidItem.controller.showAboutDialog()
         }
     }
 
@@ -207,33 +298,41 @@ PlasmaExtras.Representation {
                     text: "PlasmaGlow"
                     font.bold: true
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
-                    QQC2.ToolTip.visible: titleHover.hovered
-                    QQC2.ToolTip.text: root.plasmoidItem.controller.isX11
-                        ? "Adjust the selected monitor" : "Global adjustment across all windows and outputs"
                     HoverHandler { id: titleHover }
+                    PlasmaComponents3.ToolTip {
+                        visible: root.visible && titleHover.hovered && !optionsMenu.visible
+                        text: root.plasmoidItem.controller.isX11
+                            ? "Adjust the selected monitor" : "Global adjustment across all windows and outputs"
+                    }
                 }
                 Item { Layout.fillWidth: true }
                 PlasmaComponents3.Button {
                     objectName: "resetButton"
-                    icon.name: "edit-undo"
+                    id: resetButton
+                    action: resetAction
+                    display: QQC2.AbstractButton.IconOnly
                     flat: true
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Reset to Default"
-                    onClicked: root.plasmoidItem.controller.reset()
+                    PlasmaComponents3.ToolTip {
+                        visible: root.visible && resetButton.hovered && !resetButton.down && !optionsMenu.visible
+                        text: resetAction.text
+                    }
                 }
                 PlasmaComponents3.Button {
                     id: optionsButton
                     objectName: "optionsButton"
                     icon.name: "application-menu"
                     flat: true
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Options"
+                    PlasmaComponents3.ToolTip {
+                        visible: root.visible && optionsButton.hovered && !optionsButton.down && !optionsMenu.visible
+                        text: "Options"
+                    }
                     onClicked: optionsMenu.popup(optionsButton, 0, optionsButton.height)
                 }
             }
 
             Rectangle {
                 Layout.fillWidth: true
+                enabled: root.plasmoidItem.controller.adjustmentsEnabled
                 implicitHeight: colorLayout.implicitHeight + Kirigami.Units.mediumSpacing * 2
                 radius: Kirigami.Units.cornerRadius
                 color: Qt.rgba(0.8, 0.1, 0.6, root.lightTheme ? 0.045 : 0.07)
@@ -270,7 +369,10 @@ PlasmaExtras.Representation {
                     RowLayout {
                         Layout.fillWidth: true
                         enabled: root.plasmoidItem.controller.saturationAvailable
-                        PlasmaComponents3.Label { text: "Saturation" }
+                        SettingLabel {
+                            text: "Saturation"
+                            helpText: "Adjust color intensity. 1.0x is neutral; 0.0x removes all color."
+                        }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.Label {
                             text: root.plasmoidItem.controller.saturation.toFixed(2) + "x"
@@ -306,7 +408,10 @@ PlasmaExtras.Representation {
                     RowLayout {
                         Layout.fillWidth: true
                         visible: root.plasmoidItem.controller.gammaAvailable
-                        PlasmaComponents3.Label { text: "Gamma" }
+                        SettingLabel {
+                            text: "Gamma"
+                            helpText: "Adjust midtone brightness. 1.0 is neutral; higher values brighten the image, lower values darken it."
+                        }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.Label {
                             text: root.plasmoidItem.controller.gamma.toFixed(2)
@@ -345,7 +450,7 @@ PlasmaExtras.Representation {
             Rectangle {
                 Layout.fillWidth: true
                 visible: !root.plasmoidItem.controller.isX11
-                enabled: root.plasmoidItem.controller.sharpeningAvailable
+                enabled: root.plasmoidItem.controller.adjustmentsEnabled && root.plasmoidItem.controller.sharpeningAvailable
                 implicitHeight: sharpeningLayout.implicitHeight + Kirigami.Units.mediumSpacing * 2
                 radius: Kirigami.Units.cornerRadius
                 color: Qt.rgba(1, 0.4, 0.15, root.lightTheme ? 0.045 : 0.07)
@@ -358,13 +463,11 @@ PlasmaExtras.Representation {
                     width: parent.width - Kirigami.Units.mediumSpacing * 2
                     spacing: Kirigami.Units.smallSpacing
 
-                    PlasmaComponents3.Label {
+                    SettingLabel {
                         text: "Sharpening"
+                        helpText: "Global SDR sharpening. 0% is the minimum active strength; select Off to disable."
                         font.bold: true
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
-                        QQC2.ToolTip.visible: sharpeningHover.hovered
-                        QQC2.ToolTip.text: "Global SDR sharpening. 0% is the minimum active strength; select Off to disable."
-                        HoverHandler { id: sharpeningHover }
                     }
                     RowLayout {
                         id: modeRow
@@ -389,6 +492,13 @@ PlasmaExtras.Representation {
                                 autoExclusive: true
                                 checked: root.plasmoidItem.controller.sharpeningMode === modelData
                                 onClicked: root.plasmoidItem.controller.sharpeningMode = modelData
+
+                                PlasmaComponents3.ToolTip {
+                                    visible: root.visible && modeButton.hovered && !modeButton.down && !optionsMenu.visible
+                                    text: modeButton.modelData === "off" ? "Disable sharpening. Color adjustments remain active."
+                                        : modeButton.modelData === "cas" ? "Contrast Adaptive Sharpening: enhance detail using local contrast."
+                                        : "Luma sharpening: enhance brightness detail with adjustable noise suppression."
+                                }
 
                                 contentItem: Item {
                                     implicitWidth: modeContent.implicitWidth
@@ -480,8 +590,9 @@ PlasmaExtras.Representation {
                         Layout.fillWidth: true
                         visible: root.plasmoidItem.controller.sharpeningMode !== "off"
                         Layout.topMargin: Kirigami.Units.smallSpacing
-                        PlasmaComponents3.Label {
+                        SettingLabel {
                             text: root.plasmoidItem.controller.sharpeningStrength > 0.5 ? "Strength (Overdrive)" : "Strength"
+                            helpText: "Adjust sharpening strength. Above 50%, overdrive boosts the effect and can produce halos. Select Off to disable sharpening."
                         }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.Label {
@@ -515,7 +626,10 @@ PlasmaExtras.Representation {
                     RowLayout {
                         Layout.fillWidth: true
                         visible: root.plasmoidItem.controller.sharpeningMode === "luma"
-                        PlasmaComponents3.Label { text: "Noise suppression" }
+                        SettingLabel {
+                            text: "Noise suppression"
+                            helpText: "Reduce sharpening of small variations and noise in Luma mode. Higher values suppress more noise and fine detail."
+                        }
                         Item { Layout.fillWidth: true }
                         PlasmaComponents3.Label {
                             text: Math.round(root.plasmoidItem.controller.sharpeningDenoise * 100) + "%"

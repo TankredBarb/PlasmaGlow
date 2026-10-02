@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.19)
 
 project(plasmaglow)
 
@@ -19,8 +19,8 @@ include(FeatureSummary)
 configure_file(package/metadata.json metadata.json COPYONLY)
 
 # Find Qt6 and KF6 libraries
-find_package(Qt6 REQUIRED COMPONENTS Core DBus Qml Quick)
-find_package(KF6 REQUIRED COMPONENTS CoreAddons Config)
+find_package(Qt6 REQUIRED COMPONENTS Core DBus Qml Quick Widgets)
+find_package(KF6 REQUIRED COMPONENTS CoreAddons Config XmlGui)
 find_package(Plasma REQUIRED)
 
 add_executable(plasmaglow-login-snapshot src/loginsettingssnapshot.cpp)
@@ -30,7 +30,6 @@ install(TARGETS plasmaglow-login-snapshot DESTINATION ${KDE_INSTALL_LIBEXECDIR})
 option(PLASMAGLOW_BUILD_KWIN_EFFECT "Build the PlasmaGlow KWin effect" OFF)
 
 if(PLASMAGLOW_BUILD_KWIN_EFFECT)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets)
     find_package(KWin REQUIRED)
 
     kcoreaddons_add_plugin(plasmaglow
@@ -46,6 +45,8 @@ if(PLASMAGLOW_BUILD_KWIN_EFFECT)
 endif()
 
 # Define the Plasma applet target
+qt_add_resources(about_resources src/about.qrc)
+
 plasma_add_applet(org.kde.plasmaglow
     QML_SOURCES
         package/contents/ui/main.qml
@@ -81,6 +82,12 @@ target_link_libraries(org.kde.plasmaglow
 
 # Add src folder to include directories so headers can be found by generated QML code
 target_include_directories(org.kde.plasmaglow PRIVATE src)
+target_sources(org.kde.plasmaglow PRIVATE ${about_resources})
+
+file(READ package/metadata.json applet_metadata)
+string(JSON applet_version GET "${applet_metadata}" KPlugin Version)
+target_compile_definitions(org.kde.plasmaglow PRIVATE PLASMAGLOW_VERSION="${applet_version}")
+target_link_libraries(org.kde.plasmaglow PRIVATE Qt6::Widgets KF6::XmlGui)
 
 # Install the applet package files (metadata, icons, QML)
 plasma_install_package(package org.kde.plasmaglow)
@@ -89,5 +96,23 @@ plasma_install_package(package org.kde.plasmaglow)
 install(FILES package/contents/images/icon.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps/ RENAME org.kde.plasmaglow.svg)
 
 install(FILES THIRD_PARTY_NOTICES.md DESTINATION ${KDE_INSTALL_DATADIR}/plasmaglow)
+
+option(PLASMAGLOW_BUILD_TESTS "Build isolated controller regression tests" OFF)
+if(PLASMAGLOW_BUILD_TESTS)
+    enable_testing()
+    find_program(DBUS_RUN_SESSION dbus-run-session REQUIRED)
+    add_executable(plasmaglow-adjustments-test
+        tests/adjustments.cpp
+        ${about_resources}
+        src/glowcontroller.cpp src/glowcontroller.h
+        src/kwinbackend.cpp src/kwinbackend.h
+        src/x11backend.cpp src/x11backend.h)
+    target_include_directories(plasmaglow-adjustments-test PRIVATE src)
+    target_compile_definitions(plasmaglow-adjustments-test PRIVATE PLASMAGLOW_VERSION="${applet_version}")
+    target_link_libraries(plasmaglow-adjustments-test PRIVATE
+        Qt6::Widgets Qt6::DBus Qt6::Qml KF6::CoreAddons KF6::ConfigCore KF6::XmlGui)
+    add_test(NAME adjustments COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:plasmaglow-adjustments-test>)
+    set_tests_properties(adjustments PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

@@ -39,7 +39,8 @@ PlasmaGlowEffect::PlasmaGlowEffect()
         ? KSharedConfig::openConfig(QStringLiteral("/etc/xdg/plasmaglow-loginrc"), KConfig::SimpleConfig)
         : KSharedConfig::openConfig(QStringLiteral("plasmaglowrc"));
     const KConfigGroup settings(config, QStringLiteral("General"));
-    const bool enabled = !m_isGreeter || settings.readEntry(QStringLiteral("enabled"), false);
+    const bool enabled = m_isGreeter ? settings.readEntry(QStringLiteral("enabled"), false)
+                                   : settings.readEntry(QStringLiteral("adjustmentsEnabled"), true);
     const double savedSaturation = enabled ? settings.readEntry(QStringLiteral("saturation"), 1.0) : 1.0;
     const double savedGamma = enabled ? settings.readEntry(QStringLiteral("gamma"), 1.0) : 1.0;
     if (std::isfinite(savedSaturation) && savedSaturation >= kMinimumSaturation && savedSaturation <= kMaximumSaturation) {
@@ -49,7 +50,7 @@ PlasmaGlowEffect::PlasmaGlowEffect()
         m_gamma = savedGamma;
     }
 
-    if (!m_isGreeter) {
+    if (!m_isGreeter && enabled) {
         const QString mode = settings.readEntry(QStringLiteral("sharpeningMode"), QStringLiteral("off"));
         if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma")) {
             m_sharpeningMode = mode;
