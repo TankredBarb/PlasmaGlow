@@ -85,4 +85,6 @@ plasma_install_package(package org.kde.plasmaglow)
 # Install icon to system icon theme so Widget Explorer can load it
 install(FILES package/contents/images/icon.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps/ RENAME org.kde.plasmaglow.svg)
 
+install(FILES THIRD_PARTY_NOTICES.md DESTINATION ${KDE_INSTALL_DATADIR}/plasmaglow)
+
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

@@ -1,6 +1,6 @@
 # PlasmaGlow
 
-KDE Plasma 6 applet for adjusting color saturation and gamma.
+KDE Plasma 6 applet for adjusting color saturation, gamma, and global sharpening.
 
 ## Backends
 
@@ -20,6 +20,52 @@ after a short delay, and pending changes are saved when the applet closes. The
 effect processes the composited screen, including newly opened windows and
 transparent surfaces. Initial shader behavior targets SDR; HDR and wide-gamut
 behavior are unconfirmed.
+
+## Sharpening
+
+On Plasma Wayland, the **Sharpening** section selects **Off**, **CAS**, or
+**Luma** (Denoised Luma Sharpening), adapted from FrameFlow's shaders. Strength
+ranges from 0 to 100%; Luma also has a noise suppression slider.
+The first 50% spans the original algorithm strength range. Above 50%, an
+overdrive gain increases the sharpening delta, reaching 4× at 100% before
+clamping RGB to the SDR range. The upper end deliberately produces strong
+halos and clipping; use lower values for normal viewing. As in the
+original algorithms, 0% is the minimum active strength; select Off to disable.
+The defaults are Off, 50% strength, and 17% noise suppression. Reset restores
+these defaults together with neutral saturation and gamma.
+
+With Off selected, rendering uses the original color-only shader, with no
+sharpening code, neighbour samples, or damage expansion. The sharpening shader
+is compiled only when sharpening is enabled. If saturation and gamma are also
+neutral (1.0), the effect is inactive and adds no offscreen pass. Changing saved
+strength or noise suppression while Off does not trigger a screen repaint.
+
+While sharpening is enabled, each updated output is repainted in full so the
+filter's neighbouring pixels are included in the presented damage. This can
+increase rendering work for small desktop updates. If the sharpening shader
+fails to compile at startup, the effect falls back to Off and retains color
+adjustment. A rejected sharpening request leaves the controls usable.
+
+Sharpening runs on the composited desktop, including games, before saturation
+and gamma, in the existing screen pass. It samples a 3×3 neighbourhood in
+normalized linear light, clamps sampling at each output's edges, and preserves
+alpha. Each output retains its own source texture for partial updates. Settings
+are saved per user as `sharpeningMode`, `sharpeningStrength`, and
+`sharpeningDenoise` in the General group of `plasmaglowrc` and loaded by KWin
+at session startup.
+
+This implementation targets SDR. Sharpening is bypassed for render targets with
+PQ transfer or HDR peak luminance above reference white; HDR and wide-gamut
+sharpening have not been validated. The existing X11 command backend and SDDM
+color snapshot do not apply sharpening. Enabling the effect requires KWin
+composition and adds GPU work; game performance needs measurement in a live
+session.
+
+The effect API is now version 2. After installing this update, restart the
+Wayland session so both the applet and KWin use the new binaries. A D-Bus effect
+reload can retain the old native library.
+
+Shader attribution and license terms are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Wayland login screen
 

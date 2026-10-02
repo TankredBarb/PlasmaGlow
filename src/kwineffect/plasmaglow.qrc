@@ -2,5 +2,7 @@
 <qresource prefix="/effects/plasmaglow">
     <file alias="shaders/plasmaglow.frag">shaders/plasmaglow.frag</file>
     <file alias="shaders/plasmaglow_core.frag">shaders/plasmaglow.frag</file>
+    <file alias="shaders/plasmaglow-color.frag">shaders/plasmaglow-color.frag</file>
+    <file alias="shaders/plasmaglow-color_core.frag">shaders/plasmaglow-color.frag</file>
 </qresource>
 </RCC>

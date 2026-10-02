@@ -29,6 +29,13 @@ class GlowController : public QObject
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(double appliedSaturation READ appliedSaturation NOTIFY appliedStateChanged)
     Q_PROPERTY(double appliedGamma READ appliedGamma NOTIFY appliedStateChanged)
+    Q_PROPERTY(QString sharpeningMode READ sharpeningMode WRITE setSharpeningMode NOTIFY sharpeningChanged)
+    Q_PROPERTY(double sharpeningStrength READ sharpeningStrength WRITE setSharpeningStrength NOTIFY sharpeningChanged)
+    Q_PROPERTY(double sharpeningDenoise READ sharpeningDenoise WRITE setSharpeningDenoise NOTIFY sharpeningChanged)
+    Q_PROPERTY(bool sharpeningAvailable READ sharpeningAvailable NOTIFY capabilitiesChanged)
+    Q_PROPERTY(QString appliedSharpeningMode READ appliedSharpeningMode NOTIFY appliedStateChanged)
+    Q_PROPERTY(double appliedSharpeningStrength READ appliedSharpeningStrength NOTIFY appliedStateChanged)
+    Q_PROPERTY(double appliedSharpeningDenoise READ appliedSharpeningDenoise NOTIFY appliedStateChanged)
     Q_PROPERTY(bool applyToLogin READ applyToLogin WRITE setApplyToLogin NOTIFY applyToLoginChanged)
 
 public:
@@ -53,6 +60,17 @@ public:
     double gamma() const;
     void setGamma(double value);
 
+    QString sharpeningMode() const;
+    void setSharpeningMode(const QString &mode);
+    double sharpeningStrength() const;
+    void setSharpeningStrength(double value);
+    double sharpeningDenoise() const;
+    void setSharpeningDenoise(double value);
+    bool sharpeningAvailable() const;
+    QString appliedSharpeningMode() const;
+    double appliedSharpeningStrength() const;
+    double appliedSharpeningDenoise() const;
+
     QString output() const;
     void setOutput(const QString &output);
 
@@ -63,6 +81,7 @@ Q_SIGNALS:
     void outputChanged();
     void outputsChanged();
     void gammaChanged();
+    void sharpeningChanged();
     void errorChanged();
     void capabilitiesChanged();
     void appliedStateChanged();
@@ -77,6 +96,12 @@ public Q_SLOTS:
 private:
     double m_saturation = 1.0;
     double m_gamma = 1.0;
+    QString m_sharpeningMode = QStringLiteral("off");
+    double m_sharpeningStrength = 0.5;
+    double m_sharpeningDenoise = 0.17;
+    QString m_appliedSharpeningMode = QStringLiteral("off");
+    double m_appliedSharpeningStrength = 0.5;
+    double m_appliedSharpeningDenoise = 0.17;
     QString m_output;
     QStringList m_outputs;
     QString m_error;
