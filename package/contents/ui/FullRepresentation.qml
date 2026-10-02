@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
@@ -14,8 +16,169 @@ PlasmaExtras.Representation {
 
     implicitWidth: Kirigami.Units.gridUnit * 20
     implicitHeight: contentLayout.implicitHeight + Kirigami.Units.mediumSpacing * 2
-
+    Layout.minimumHeight: implicitHeight
+    Layout.preferredHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
     collapseMarginsHint: false
+
+    function valueColor(accent) {
+        return lightTheme ? Qt.darker(accent, 1.6) : Qt.lighter(accent, 1.15)
+    }
+
+    component NeonSlider: QQC2.Slider {
+        id: slider
+        required property color startColor
+        required property color accentColor
+        required property color endColor
+        property bool lightTheme: false
+        property bool directInput: false
+        readonly property bool engaged: hovered || pressed || inputArea.containsMouse || inputArea.pressed || activeFocus
+
+        Layout.fillWidth: true
+        live: true
+        implicitHeight: Kirigami.Units.gridUnit * 2
+        opacity: enabled ? 1 : 0.4
+
+        background: Rectangle {
+            x: slider.leftPadding
+            y: slider.topPadding + slider.availableHeight / 2 - height / 2
+            width: slider.availableWidth
+            implicitWidth: 200
+            implicitHeight: 6
+            height: implicitHeight
+            radius: 3
+            color: slider.lightTheme ? "#d5d8e2" : "#303246"
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: slider.visualPosition * parent.width
+                height: parent.height + 6
+                radius: height / 2
+                color: slider.accentColor
+                opacity: slider.engaged ? 0.22 : 0.12
+            }
+            Rectangle {
+                width: slider.visualPosition * parent.width
+                height: parent.height
+                radius: parent.radius
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: slider.startColor }
+                    GradientStop { position: 0.5; color: slider.accentColor }
+                    GradientStop { position: 1.0; color: slider.endColor }
+                }
+            }
+        }
+
+        handle: Item {
+            implicitWidth: 18
+            implicitHeight: Kirigami.Units.gridUnit * 2
+            x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
+            y: slider.topPadding + slider.availableHeight / 2 - height / 2
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: slider.engaged ? 30 : 26
+                height: width
+                radius: width / 2
+                color: slider.accentColor
+                opacity: slider.engaged ? 0.23 : 0.12
+                Behavior on width { NumberAnimation { duration: 120 } }
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 24
+                height: 24
+                radius: 12
+                color: "transparent"
+                border.color: slider.endColor
+                border.width: 1
+                opacity: slider.engaged ? 0.9 : 0.45
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 18
+                height: 18
+                radius: 9
+                color: "#ffffff"
+                border.color: slider.accentColor
+                border.width: 2
+            }
+        }
+
+        // Preserve the color sliders' existing direct click/drag input path.
+        MouseArea {
+            id: inputArea
+            anchors.fill: parent
+            z: 100
+            enabled: slider.directInput
+            acceptedButtons: Qt.LeftButton
+            hoverEnabled: true
+            preventStealing: true
+            cursorShape: Qt.PointingHandCursor
+
+            function updateValue(mouseX) {
+                const fraction = Math.max(0, Math.min(1,
+                    (mouseX - slider.leftPadding - 9) / (slider.availableWidth - 18)))
+                slider.value = slider.valueAt(slider.mirrored ? 1 - fraction : fraction)
+                slider.moved()
+            }
+            onPressed: mouse => {
+                slider.forceActiveFocus()
+                updateValue(mouse.x)
+            }
+            onPositionChanged: mouse => {
+                if (pressed) {
+                    updateValue(mouse.x)
+                }
+            }
+        }
+    }
+
+    component PresetRow: RowLayout {
+        id: presets
+        required property var values
+        required property real currentValue
+        property string suffix: ""
+        property real valueScale: 1
+        property int decimals: 1
+        signal selected(real value)
+
+        Layout.fillWidth: true
+        spacing: Kirigami.Units.smallSpacing
+
+        Repeater {
+            model: presets.values
+            delegate: PlasmaComponents3.Button {
+                required property real modelData
+                readonly property bool current: Math.abs(presets.currentValue - modelData) < 0.001
+                Layout.fillWidth: true
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                text: (modelData * presets.valueScale).toFixed(presets.decimals) + presets.suffix
+                checkable: true
+                autoExclusive: true
+                checked: current
+                onClicked: presets.selected(modelData)
+            }
+        }
+    }
+
+    QQC2.Menu {
+        id: optionsMenu
+        objectName: "optionsMenu"
+        QQC2.MenuItem {
+            text: "Colors on login screen"
+            visible: !root.plasmoidItem.controller.isX11
+            checkable: true
+            checked: root.plasmoidItem.controller.applyToLogin
+            onTriggered: root.plasmoidItem.controller.applyToLogin = checked
+        }
+        QQC2.MenuItem {
+            text: "Refresh"
+            icon.name: "view-refresh"
+            onTriggered: root.plasmoidItem.controller.refresh()
+        }
+    }
 
     QQC2.ScrollView {
         id: scrollView
@@ -28,13 +191,11 @@ PlasmaExtras.Representation {
         ColumnLayout {
             id: contentLayout
             width: scrollView.availableWidth
-            spacing: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.mediumSpacing
 
-            // --- HEADER ---
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
-
                 Image {
                     source: root.lightTheme ? "icon-light.svg" : "icon.svg"
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 1.5
@@ -42,570 +203,365 @@ PlasmaExtras.Representation {
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                 }
-
-                Item {
-                    implicitWidth: titleLabel.implicitWidth
-                    implicitHeight: titleLabel.implicitHeight
-                    Layout.preferredWidth: implicitWidth
-                    Layout.preferredHeight: implicitHeight
-
-                    // Shadow offset
-                    PlasmaComponents3.Label {
-                        text: "PlasmaGlow"
-                        font.bold: true
-                        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
-                        color: "#000000"
-                        opacity: 0.4
-                        x: 1
-                        y: 1
-                    }
-
-                    // Main neon text
-                    PlasmaComponents3.Label {
-                        id: titleLabel
-                        text: "PlasmaGlow"
-                        font.bold: true
-                        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
-                        color: "#ff007f"
-                    }
+                PlasmaComponents3.Label {
+                    text: "PlasmaGlow"
+                    font.bold: true
+                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
+                    QQC2.ToolTip.visible: titleHover.hovered
+                    QQC2.ToolTip.text: root.plasmoidItem.controller.isX11
+                        ? "Adjust the selected monitor" : "Global adjustment across all windows and outputs"
+                    HoverHandler { id: titleHover }
                 }
-
                 Item { Layout.fillWidth: true }
-
-                // Refresh button
                 PlasmaComponents3.Button {
-                    icon.name: "view-refresh"
-                    flat: true
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Refresh color correction backend"
-                    onClicked: root.plasmoidItem.controller.refresh()
-                }
-
-                // Reset button
-                PlasmaComponents3.Button {
+                    objectName: "resetButton"
                     icon.name: "edit-undo"
                     flat: true
                     QQC2.ToolTip.visible: hovered
                     QQC2.ToolTip.text: "Reset to Default"
                     onClicked: root.plasmoidItem.controller.reset()
                 }
+                PlasmaComponents3.Button {
+                    id: optionsButton
+                    objectName: "optionsButton"
+                    icon.name: "application-menu"
+                    flat: true
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Options"
+                    onClicked: optionsMenu.popup(optionsButton, 0, optionsButton.height)
+                }
             }
 
-            PlasmaComponents3.Label {
+            Rectangle {
                 Layout.fillWidth: true
-                visible: !root.plasmoidItem.controller.isX11 && root.plasmoidItem.controller.backendReady
-                text: "Global adjustment across all windows and outputs"
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                opacity: 0.7
-            }
+                implicitHeight: colorLayout.implicitHeight + Kirigami.Units.mediumSpacing * 2
+                radius: Kirigami.Units.cornerRadius
+                color: Qt.rgba(0.8, 0.1, 0.6, root.lightTheme ? 0.045 : 0.07)
+                border.color: Qt.rgba(1, 0, 0.5, root.lightTheme ? 0.2 : 0.25)
 
-            PlasmaComponents3.CheckBox {
-                Layout.fillWidth: true
-                visible: !root.plasmoidItem.controller.isX11
-                text: "Use my colors on the login screen"
-                checked: root.plasmoidItem.controller.applyToLogin
-                onToggled: root.plasmoidItem.controller.applyToLogin = checked
-            }
-
-            // --- COLOR ADJUSTMENT CONTROLS ---
-            ColumnLayout {
-                id: adjustmentControls
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.largeSpacing
-
-                // --- OUTPUT SELECTOR ---
                 ColumnLayout {
-                    Layout.fillWidth: true
+                    id: colorLayout
+                    x: Kirigami.Units.mediumSpacing
+                    y: Kirigami.Units.mediumSpacing
+                    width: parent.width - Kirigami.Units.mediumSpacing * 2
                     spacing: Kirigami.Units.smallSpacing
-                    visible: root.plasmoidItem.controller.isX11
 
                     PlasmaComponents3.Label {
-                        Layout.fillWidth: true
-                        text: "Monitor Output"
+                        text: "Color"
                         font.bold: true
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        color: Kirigami.Theme.textColor
-                        wrapMode: Text.WordWrap
-                        opacity: 0.7
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
                     }
-
                     PlasmaComponents3.ComboBox {
                         id: outputCombo
                         Layout.fillWidth: true
+                        visible: root.plasmoidItem.controller.isX11
                         model: root.plasmoidItem.controller.outputs
-
+                        Component.onCompleted: currentIndex = model.indexOf(root.plasmoidItem.controller.output)
+                        onActivated: index => { root.plasmoidItem.controller.output = textAt(index) }
                         Connections {
                             target: root.plasmoidItem.controller
-                            function onOutputChanged() {
-                                outputCombo.currentIndex = outputCombo.model.indexOf(root.plasmoidItem.controller.output);
-                            }
+                            function onOutputChanged() { outputCombo.currentIndex = outputCombo.model.indexOf(root.plasmoidItem.controller.output) }
                             function onOutputsChanged() {
-                                outputCombo.model = root.plasmoidItem.controller.outputs;
-                                outputCombo.currentIndex = outputCombo.model.indexOf(root.plasmoidItem.controller.output);
+                                outputCombo.model = root.plasmoidItem.controller.outputs
+                                outputCombo.currentIndex = outputCombo.model.indexOf(root.plasmoidItem.controller.output)
                             }
-                        }
-
-                        Component.onCompleted: {
-                            currentIndex = model.indexOf(root.plasmoidItem.controller.output);
-                        }
-
-                        onActivated: index => {
-                            root.plasmoidItem.controller.output = textAt(index);
                         }
                     }
-                }
-
-                // --- SLIDER SECTION ---
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: root.plasmoidItem.controller.saturationAvailable
-
                     RowLayout {
                         Layout.fillWidth: true
-
-                        PlasmaComponents3.Label {
-                            text: "Color Saturation"
-                            font.bold: true
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            color: Kirigami.Theme.textColor
-                            opacity: 0.7
-                        }
-
+                        enabled: root.plasmoidItem.controller.saturationAvailable
+                        PlasmaComponents3.Label { text: "Saturation" }
                         Item { Layout.fillWidth: true }
-
                         PlasmaComponents3.Label {
-                            text: (root.plasmoidItem.controller.saturation).toFixed(2) + "x"
+                            text: root.plasmoidItem.controller.saturation.toFixed(2) + "x"
                             font.bold: true
                             font.family: "Monospace"
-                            //color: "#1d9ffc" // Readable blue value indicator
-                            color: "#0000ff"
+                            color: root.valueColor("#ff007f")
                         }
                     }
-
-                    // Custom Styled Neon Slider
-                    QQC2.Slider {
+                    NeonSlider {
                         id: satSlider
-                        Layout.fillWidth: true
-                        from: 0.0
-                        to: 4.0
-                        stepSize: 0.05
-                        live: true
+                        objectName: "saturationSlider"
+                        enabled: root.plasmoidItem.controller.saturationAvailable
+                        from: 0.0; to: 4.0; stepSize: 0.05
                         value: root.plasmoidItem.controller.saturation
-
-                        onMoved: {
-                            root.plasmoidItem.controller.saturation = value;
-                        }
-
+                        startColor: "#7f00ff"; accentColor: "#ff007f"; endColor: "#00ffff"
+                        lightTheme: root.lightTheme
+                        directInput: true
+                        onMoved: root.plasmoidItem.controller.saturation = value
                         Connections {
                             target: root.plasmoidItem.controller
-                            function onSaturationChanged() {
-                                satSlider.value = root.plasmoidItem.controller.saturation;
-                            }
-                        }
-
-                        background: Rectangle {
-                            x: satSlider.leftPadding
-                            y: satSlider.topPadding + satSlider.availableHeight / 2 - height / 2
-                            implicitWidth: 200
-                            implicitHeight: 6
-                            width: satSlider.availableWidth
-                            height: implicitHeight
-                            radius: 3
-                            color: "#2a2c3f"
-
-                            // Glowing active portion
-                            Rectangle {
-                                width: satSlider.visualPosition * parent.width
-                                height: parent.height
-                                radius: parent.radius
-                                gradient: Gradient {
-                                    orientation: Gradient.Horizontal
-                                    GradientStop { position: 0.0; color: "#7f00ff" } // Neon Violet
-                                    GradientStop { position: 0.5; color: "#ff007f" } // Hot Pink
-                                    GradientStop { position: 1.0; color: "#00ffff" } // Neon Cyan
-                                }
-                            }
-                        }
-
-                        handle: Item {
-                            implicitWidth: Kirigami.Units.gridUnit * 2
-                            implicitHeight: Kirigami.Units.gridUnit * 2
-                            x: satSlider.leftPadding + satSlider.visualPosition * (satSlider.availableWidth - 18)
-                               - (width - 18) / 2
-                            y: satSlider.topPadding + satSlider.availableHeight / 2 - height / 2
-
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 18
-                                height: 18
-                                radius: 9
-                                color: "#ffffff"
-                                border.color: "#ff007f"
-                                border.width: 2
-
-                                // Glow aura ring
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: parent.width + 6
-                                    height: parent.height + 6
-                                    radius: width / 2
-                                    color: "transparent"
-                                    border.color: "#00ffff"
-                                    border.width: 1.5
-                                    opacity: satInputArea.containsMouse || satInputArea.pressed
-                                        || satSlider.hovered || satSlider.pressed ? 0.9 : 0.4
-
-                                    Behavior on opacity {
-                                        NumberAnimation { duration: 150 }
-                                    }
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            id: satInputArea
-                            parent: satSlider
-                            anchors.fill: parent
-                            z: 100
-                            acceptedButtons: Qt.LeftButton
-                            hoverEnabled: true
-                            preventStealing: true
-                            cursorShape: Qt.PointingHandCursor
-
-                            function updateValue(mouseX) {
-                                const fraction = Math.max(0, Math.min(1,
-                                    (mouseX - satSlider.leftPadding - 9) / (satSlider.availableWidth - 18)))
-                                const position = satSlider.mirrored ? 1 - fraction : fraction
-                                root.plasmoidItem.controller.saturation = satSlider.valueAt(position)
-                            }
-
-                            onPressed: mouse => {
-                                satSlider.forceActiveFocus()
-                                updateValue(mouse.x)
-                            }
-                            onPositionChanged: mouse => {
-                                if (pressed) {
-                                    updateValue(mouse.x)
-                                }
-                            }
+                            function onSaturationChanged() { satSlider.value = root.plasmoidItem.controller.saturation }
                         }
                     }
+                    PresetRow {
+                        objectName: "saturationPresets"
+                        enabled: root.plasmoidItem.controller.saturationAvailable
+                        values: [1.0, 1.5, 2.0, 3.0]
+                        currentValue: root.plasmoidItem.controller.saturation
+                        suffix: "x"
+                        onSelected: value => { root.plasmoidItem.controller.saturation = value }
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.plasmoidItem.controller.gammaAvailable
+                        PlasmaComponents3.Label { text: "Gamma" }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.Label {
+                            text: root.plasmoidItem.controller.gamma.toFixed(2)
+                            font.bold: true
+                            font.family: "Monospace"
+                            color: root.valueColor("#00e69c")
+                        }
+                    }
+                    NeonSlider {
+                        id: gammaSlider
+                        objectName: "gammaSlider"
+                        visible: root.plasmoidItem.controller.gammaAvailable
+                        enabled: root.plasmoidItem.controller.gammaAvailable
+                        from: 0.1; to: 5.0; stepSize: 0.05
+                        value: root.plasmoidItem.controller.gamma
+                        startColor: "#00ff88"; accentColor: "#00ffc4"; endColor: "#00ffff"
+                        lightTheme: root.lightTheme
+                        directInput: true
+                        onMoved: root.plasmoidItem.controller.gamma = value
+                        Connections {
+                            target: root.plasmoidItem.controller
+                            function onGammaChanged() { gammaSlider.value = root.plasmoidItem.controller.gamma }
+                        }
+                    }
+                    PresetRow {
+                        objectName: "gammaPresets"
+                        visible: root.plasmoidItem.controller.gammaAvailable
+                        enabled: root.plasmoidItem.controller.gammaAvailable
+                        values: [0.8, 1.0, 1.2, 1.5]
+                        currentValue: root.plasmoidItem.controller.gamma
+                        onSelected: value => { root.plasmoidItem.controller.gamma = value }
+                    }
                 }
+            }
 
-                // --- PRESETS ROW ---
-                RowLayout {
-                    Layout.fillWidth: true
+            Rectangle {
+                Layout.fillWidth: true
+                visible: !root.plasmoidItem.controller.isX11
+                enabled: root.plasmoidItem.controller.sharpeningAvailable
+                implicitHeight: sharpeningLayout.implicitHeight + Kirigami.Units.mediumSpacing * 2
+                radius: Kirigami.Units.cornerRadius
+                color: Qt.rgba(1, 0.4, 0.15, root.lightTheme ? 0.045 : 0.07)
+                border.color: Qt.rgba(1, 0.45, 0.15, root.lightTheme ? 0.2 : 0.25)
+
+                ColumnLayout {
+                    id: sharpeningLayout
+                    x: Kirigami.Units.mediumSpacing
+                    y: Kirigami.Units.mediumSpacing
+                    width: parent.width - Kirigami.Units.mediumSpacing * 2
                     spacing: Kirigami.Units.smallSpacing
-                    enabled: root.plasmoidItem.controller.saturationAvailable
 
                     PlasmaComponents3.Label {
-                        text: "Presets:"
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        opacity: 0.6
+                        text: "Sharpening"
+                        font.bold: true
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        QQC2.ToolTip.visible: sharpeningHover.hovered
+                        QQC2.ToolTip.text: "Global SDR sharpening. 0% is the minimum active strength; select Off to disable."
+                        HoverHandler { id: sharpeningHover }
                     }
-
-                    Item { Layout.fillWidth: true }
-
-                    PlasmaComponents3.Button {
-                        text: "1.0x"
-                        flat: true
-                        onClicked: root.plasmoidItem.controller.saturation = 1.0
-                    }
-                    PlasmaComponents3.Button {
-                        text: "1.5x"
-                        flat: true
-                        onClicked: root.plasmoidItem.controller.saturation = 1.5
-                    }
-                    PlasmaComponents3.Button {
-                        text: "2.0x"
-                        flat: true
-                        onClicked: root.plasmoidItem.controller.saturation = 2.0
-                    }
-                    PlasmaComponents3.Button {
-                        text: "3.0x"
-                        flat: true
-                        onClicked: root.plasmoidItem.controller.saturation = 3.0
-                    }
-                }
-
-                // --- GAMMA SLIDER SECTION ---
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: root.plasmoidItem.controller.gammaAvailable
-                    enabled: root.plasmoidItem.controller.gammaAvailable
-
                     RowLayout {
-                        Layout.fillWidth: true
-
-                        PlasmaComponents3.Label {
-                            text: "Display Gamma"
-                            font.bold: true
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            color: Kirigami.Theme.textColor
-                            opacity: 0.7
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        PlasmaComponents3.Label {
-                            text: (root.plasmoidItem.controller.gamma).toFixed(2)
-                            font.bold: true
-                            font.family: "Monospace"
-                            //color: "#2ecc71" // Readable green value indicator
-                            color: "#00ff00"
-                        }
-                    }
-
-                    // Custom Styled Neon Gamma Slider
-                    QQC2.Slider {
-                        id: gammaSlider
-                        Layout.fillWidth: true
-                        from: 0.1
-                        to: 5.0
-                        stepSize: 0.05
-                        live: true
-                        value: root.plasmoidItem.controller.gamma
-
-                        onMoved: {
-                            root.plasmoidItem.controller.gamma = value;
-                        }
-
-                        Connections {
-                            target: root.plasmoidItem.controller
-                            function onGammaChanged() {
-                                gammaSlider.value = root.plasmoidItem.controller.gamma;
-                            }
-                        }
-
-                        background: Rectangle {
-                            x: gammaSlider.leftPadding
-                            y: gammaSlider.topPadding + gammaSlider.availableHeight / 2 - height / 2
-                            implicitWidth: 200
-                            implicitHeight: 6
-                            width: gammaSlider.availableWidth
-                            height: implicitHeight
-                            radius: 3
-                            color: "#2a2c3f"
-
-                            // Glowing active portion
-                            Rectangle {
-                                width: gammaSlider.visualPosition * parent.width
-                                height: parent.height
-                                radius: parent.radius
-                                gradient: Gradient {
-                                    orientation: Gradient.Horizontal
-                                    GradientStop { position: 0.0; color: "#00ff88" } // Neon Mint Green
-                                    GradientStop { position: 0.5; color: "#00ffc4" } // Neon Teal
-                                    GradientStop { position: 1.0; color: "#00ffff" } // Neon Cyan
-                                }
-                            }
-                        }
-
-                        handle: Item {
-                            implicitWidth: Kirigami.Units.gridUnit * 2
-                            implicitHeight: Kirigami.Units.gridUnit * 2
-                            x: gammaSlider.leftPadding + gammaSlider.visualPosition * (gammaSlider.availableWidth - 18)
-                               - (width - 18) / 2
-                            y: gammaSlider.topPadding + gammaSlider.availableHeight / 2 - height / 2
-
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 18
-                                height: 18
-                                radius: 9
-                                color: "#ffffff"
-                                border.color: "#00ff88"
-                                border.width: 2
-
-                                // Glow aura ring
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: parent.width + 6
-                                    height: parent.height + 6
-                                    radius: width / 2
-                                    color: "transparent"
-                                    border.color: "#00ffff"
-                                    border.width: 1.5
-                                    opacity: gammaInputArea.containsMouse || gammaInputArea.pressed
-                                        || gammaSlider.hovered || gammaSlider.pressed ? 0.9 : 0.4
-
-                                    Behavior on opacity {
-                                        NumberAnimation { duration: 150 }
-                                    }
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            id: gammaInputArea
-                            parent: gammaSlider
-                            anchors.fill: parent
-                            z: 100
-                            acceptedButtons: Qt.LeftButton
-                            hoverEnabled: true
-                            preventStealing: true
-                            cursorShape: Qt.PointingHandCursor
-
-                            function updateValue(mouseX) {
-                                const fraction = Math.max(0, Math.min(1,
-                                    (mouseX - gammaSlider.leftPadding - 9) / (gammaSlider.availableWidth - 18)))
-                                const position = gammaSlider.mirrored ? 1 - fraction : fraction
-                                root.plasmoidItem.controller.gamma = gammaSlider.valueAt(position)
-                            }
-
-                            onPressed: mouse => {
-                                gammaSlider.forceActiveFocus()
-                                updateValue(mouse.x)
-                            }
-                            onPositionChanged: mouse => {
-                                if (pressed) {
-                                    updateValue(mouse.x)
-                                }
-                            }
-                        }
-                    }
-
-                    // --- GAMMA PRESETS ROW ---
-                    RowLayout {
+                        id: modeRow
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
 
+                        Repeater {
+                            model: ["off", "cas", "luma"]
+                            delegate: QQC2.Button {
+                                id: modeButton
+                                required property string modelData
+                                readonly property color accent: modelData === "off" ? "#d8a0ff" : modelData === "cas" ? "#ff8040" : "#00e5ff"
+                                readonly property color gradientStart: modelData === "off" ? "#8842c7" : modelData === "cas" ? "#d46b10" : "#008c86"
+                                readonly property color gradientEnd: modelData === "off" ? "#5a2aa0" : modelData === "cas" ? "#c42159" : "#3060d5"
+                                readonly property color foreground: "#ffffff"
+                                objectName: "modeButton-" + modelData
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                                padding: Kirigami.Units.smallSpacing
+                                text: modelData === "off" ? "Off" : modelData === "cas" ? "CAS" : "Luma"
+                                checkable: true
+                                autoExclusive: true
+                                checked: root.plasmoidItem.controller.sharpeningMode === modelData
+                                onClicked: root.plasmoidItem.controller.sharpeningMode = modelData
+
+                                contentItem: Item {
+                                    implicitWidth: modeContent.implicitWidth
+                                    implicitHeight: modeContent.implicitHeight
+                                    RowLayout {
+                                        id: modeContent
+                                        anchors.centerIn: parent
+                                        spacing: Kirigami.Units.smallSpacing
+                                        Kirigami.Icon {
+                                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                            source: Qt.resolvedUrl("mode-" + modeButton.modelData + ".svg")
+                                            isMask: true
+                                            color: modeButton.foreground
+                                        }
+                                        PlasmaComponents3.Label {
+                                            objectName: "modeLabel-" + modeButton.modelData
+                                            text: modeButton.text
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                            font.bold: true
+                                            color: modeButton.foreground
+                                        }
+                                    }
+                                }
+                                background: Item {
+                                    implicitHeight: Kirigami.Units.gridUnit * 2.1
+                                    implicitWidth: Kirigami.Units.gridUnit * 3
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.topMargin: 2
+                                        anchors.bottomMargin: -2
+                                        radius: Kirigami.Units.cornerRadius
+                                        color: "#000000"
+                                        opacity: root.lightTheme ? 0.16 : 0.35
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: -2
+                                        radius: Kirigami.Units.cornerRadius + 2
+                                        color: modeButton.accent
+                                        opacity: modeButton.activeFocus ? 0.35 : modeButton.checked ? 0.2 : 0
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: -2
+                                        radius: Kirigami.Units.cornerRadius + 2
+                                        color: "transparent"
+                                        border.color: root.lightTheme ? "#232629" : "#ffffff"
+                                        border.width: 2
+                                        visible: modeButton.checked
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: Kirigami.Units.cornerRadius
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0
+                                                color: modeButton.checked ? Qt.lighter(modeButton.gradientStart, modeButton.down ? 1 : 1.15)
+                                                    : Qt.darker(modeButton.gradientStart, modeButton.hovered ? 1.1 : 1.4)
+                                            }
+                                            GradientStop {
+                                                position: 1
+                                                color: modeButton.checked ? modeButton.gradientEnd
+                                                    : Qt.darker(modeButton.gradientEnd, modeButton.hovered ? 1.1 : 1.4)
+                                            }
+                                        }
+                                        border.color: modeButton.checked || modeButton.hovered || modeButton.activeFocus
+                                            ? modeButton.accent : Qt.rgba(modeButton.accent.r, modeButton.accent.g, modeButton.accent.b, 0.5)
+                                        border.width: modeButton.checked || modeButton.activeFocus ? 2 : 1
+                                        Rectangle {
+                                            anchors.top: parent.top
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.margins: 3
+                                            height: 1
+                                            radius: 1
+                                            color: "#ffffff"
+                                            opacity: modeButton.checked ? 0.35 : 0.18
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.plasmoidItem.controller.sharpeningMode !== "off"
+                        Layout.topMargin: Kirigami.Units.smallSpacing
                         PlasmaComponents3.Label {
-                            text: "Gamma Presets:"
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            opacity: 0.6
+                            text: root.plasmoidItem.controller.sharpeningStrength > 0.5 ? "Strength (Overdrive)" : "Strength"
                         }
-
                         Item { Layout.fillWidth: true }
-
-                        PlasmaComponents3.Button {
-                            text: "0.8"
-                            flat: true
-                            onClicked: root.plasmoidItem.controller.gamma = 0.8
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.plasmoidItem.controller.sharpeningStrength * 100) + "%"
+                            font.bold: true
+                            font.family: "Monospace"
+                            color: root.valueColor("#ff8040")
                         }
-                        PlasmaComponents3.Button {
-                            text: "1.0"
-                            flat: true
-                            onClicked: root.plasmoidItem.controller.gamma = 1.0
+                    }
+                    NeonSlider {
+                        id: sharpeningSlider
+                        objectName: "sharpeningSlider"
+                        visible: root.plasmoidItem.controller.sharpeningMode !== "off"
+                        from: 0.0; to: 1.0; stepSize: 0.01
+                        value: root.plasmoidItem.controller.sharpeningStrength
+                        startColor: "#ffca40"; accentColor: "#ff8040"; endColor: "#ff007f"
+                        lightTheme: root.lightTheme
+                        onMoved: root.plasmoidItem.controller.sharpeningStrength = value
+                    }
+                    PresetRow {
+                        objectName: "sharpeningPresets"
+                        visible: root.plasmoidItem.controller.sharpeningMode !== "off"
+                        values: [0.25, 0.5, 0.75, 1.0]
+                        currentValue: root.plasmoidItem.controller.sharpeningStrength
+                        valueScale: 100
+                        decimals: 0
+                        suffix: "%"
+                        onSelected: value => { root.plasmoidItem.controller.sharpeningStrength = value }
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.plasmoidItem.controller.sharpeningMode === "luma"
+                        PlasmaComponents3.Label { text: "Noise suppression" }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.plasmoidItem.controller.sharpeningDenoise * 100) + "%"
+                            font.bold: true
+                            font.family: "Monospace"
+                            color: root.valueColor("#00c8ff")
                         }
-                        PlasmaComponents3.Button {
-                            text: "1.2"
-                            flat: true
-                            onClicked: root.plasmoidItem.controller.gamma = 1.2
-                        }
-                        PlasmaComponents3.Button {
-                            text: "1.5"
-                            flat: true
-                            onClicked: root.plasmoidItem.controller.gamma = 1.5
+                    }
+                    NeonSlider {
+                        id: denoiseSlider
+                        objectName: "denoiseSlider"
+                        visible: root.plasmoidItem.controller.sharpeningMode === "luma"
+                        from: 0.0; to: 1.0; stepSize: 0.01
+                        value: root.plasmoidItem.controller.sharpeningDenoise
+                        startColor: "#00ffff"; accentColor: "#00c8ff"; endColor: "#7f00ff"
+                        lightTheme: root.lightTheme
+                        onMoved: root.plasmoidItem.controller.sharpeningDenoise = value
+                    }
+                    PresetRow {
+                        objectName: "denoisePresets"
+                        visible: root.plasmoidItem.controller.sharpeningMode === "luma"
+                        values: [0.0, 0.17, 0.5, 1.0]
+                        currentValue: root.plasmoidItem.controller.sharpeningDenoise
+                        valueScale: 100
+                        decimals: 0
+                        suffix: "%"
+                        onSelected: value => { root.plasmoidItem.controller.sharpeningDenoise = value }
+                    }
+                    Connections {
+                        target: root.plasmoidItem.controller
+                        function onSharpeningChanged() {
+                            sharpeningSlider.value = root.plasmoidItem.controller.sharpeningStrength
+                            denoiseSlider.value = root.plasmoidItem.controller.sharpeningDenoise
                         }
                     }
                 }
             }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-                visible: !root.plasmoidItem.controller.isX11
-                enabled: root.plasmoidItem.controller.sharpeningAvailable
-
-                PlasmaComponents3.Label {
-                    text: "Sharpening"
-                    font.bold: true
-                    opacity: 0.7
-                }
-
-                PlasmaComponents3.ComboBox {
-                    id: sharpeningCombo
-                    Layout.fillWidth: true
-                    model: ["Off", "CAS", "Luma"]
-                    currentIndex: ["off", "cas", "luma"].indexOf(root.plasmoidItem.controller.sharpeningMode)
-                    onActivated: index => {
-                        root.plasmoidItem.controller.sharpeningMode = ["off", "cas", "luma"][index]
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    enabled: root.plasmoidItem.controller.sharpeningMode !== "off"
-
-                    PlasmaComponents3.Label {
-                        text: root.plasmoidItem.controller.sharpeningStrength > 0.5 ? "Strength (Overdrive)" : "Strength"
-                    }
-                    Item { Layout.fillWidth: true }
-                    PlasmaComponents3.Label {
-                        text: Math.round(root.plasmoidItem.controller.sharpeningStrength * 100) + "%"
-                        font.family: "Monospace"
-                    }
-                }
-
-                QQC2.Slider {
-                    id: sharpeningSlider
-                    Layout.fillWidth: true
-                    enabled: root.plasmoidItem.controller.sharpeningMode !== "off"
-                    from: 0.0
-                    to: 1.0
-                    stepSize: 0.01
-                    live: true
-                    value: root.plasmoidItem.controller.sharpeningStrength
-                    onMoved: root.plasmoidItem.controller.sharpeningStrength = value
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: root.plasmoidItem.controller.sharpeningMode === "luma"
-
-                    PlasmaComponents3.Label { text: "Noise suppression" }
-                    Item { Layout.fillWidth: true }
-                    PlasmaComponents3.Label {
-                        text: Math.round(root.plasmoidItem.controller.sharpeningDenoise * 100) + "%"
-                        font.family: "Monospace"
-                    }
-                }
-
-                QQC2.Slider {
-                    id: denoiseSlider
-                    Layout.fillWidth: true
-                    visible: root.plasmoidItem.controller.sharpeningMode === "luma"
-                    from: 0.0
-                    to: 1.0
-                    stepSize: 0.01
-                    live: true
-                    value: root.plasmoidItem.controller.sharpeningDenoise
-                    onMoved: root.plasmoidItem.controller.sharpeningDenoise = value
-                }
-
-                Connections {
-                    target: root.plasmoidItem.controller
-                    function onSharpeningChanged() {
-                        sharpeningCombo.currentIndex = ["off", "cas", "luma"].indexOf(root.plasmoidItem.controller.sharpeningMode)
-                        sharpeningSlider.value = root.plasmoidItem.controller.sharpeningStrength
-                        denoiseSlider.value = root.plasmoidItem.controller.sharpeningDenoise
-                    }
-                }
-
-                PlasmaComponents3.Label {
-                    Layout.fillWidth: true
-                    text: "Global SDR sharpening. Select Off to disable; 0% is the minimum strength."
-                    wrapMode: Text.WordWrap
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.7
-                }
-            }
-
-            // --- BACKEND STATUS ---
             PlasmaExtras.PlaceholderMessage {
                 Layout.fillWidth: true
                 visible: !root.plasmoidItem.controller.backendReady || root.plasmoidItem.controller.error.length > 0
                 iconName: "dialog-warning"
                 text: root.plasmoidItem.controller.backendReady ? "PlasmaGlow adjustment failed" : "PlasmaGlow backend unavailable"
                 explanation: root.plasmoidItem.controller.error.length > 0
-                    ? root.plasmoidItem.controller.error
-                    : "Use Refresh to check the backend again."
+                    ? root.plasmoidItem.controller.error : "Use Refresh to check the backend again."
             }
-
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 visible: root.plasmoidItem.controller.isX11 && !root.plasmoidItem.controller.saturationAvailable
@@ -615,7 +571,6 @@ PlasmaExtras.Representation {
                 wrapMode: Text.Wrap
                 opacity: 0.8
             }
-
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 visible: root.plasmoidItem.controller.isX11 && !root.plasmoidItem.controller.hasXGamma

@@ -54,6 +54,9 @@ plasma_add_applet(org.kde.plasmaglow
     RESOURCES
         package/contents/images/icon.svg
         package/contents/images/icon-light.svg
+        package/contents/images/mode-off.svg
+        package/contents/images/mode-cas.svg
+        package/contents/images/mode-luma.svg
     CPP_SOURCES
         src/glowcontroller.h
         src/glowcontroller.cpp
