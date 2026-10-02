@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
+import org.kde.ksvg as KSvg
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.extras as PlasmaExtras
 
@@ -176,6 +177,7 @@ PlasmaExtras.Representation {
         Repeater {
             model: presets.values
             delegate: PlasmaComponents3.Button {
+                id: presetButton
                 required property real modelData
                 readonly property bool current: Math.abs(presets.currentValue - modelData) < 0.001
                 Layout.fillWidth: true
@@ -185,6 +187,39 @@ PlasmaExtras.Representation {
                 autoExclusive: true
                 checked: current
                 onClicked: presets.selected(modelData)
+
+                hoverEnabled: false
+                HoverHandler {
+                    id: presetHover
+                    enabled: presetButton.enabled
+                }
+
+                KSvg.FrameSvgItem {
+                    parent: presetButton.background
+                    anchors.fill: parent
+                    imagePath: "widgets/button"
+                    prefix: presetButton.checked ? "normal" : "pressed"
+                    opacity: presetHover.hovered && !presetButton.down
+                        ? (presetButton.checked ? 0.18 : 0.28) : 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                    }
+                }
+
+                KSvg.FrameSvgItem {
+                    parent: presetButton.background
+                    anchors.fill: parent
+                    anchors.leftMargin: -margins.left
+                    anchors.topMargin: -margins.top
+                    anchors.rightMargin: -margins.right
+                    anchors.bottomMargin: -margins.bottom
+                    imagePath: "widgets/button"
+                    prefix: "hover"
+                    opacity: presetHover.hovered && !presetButton.down ? 1 : 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                    }
+                }
             }
         }
     }
