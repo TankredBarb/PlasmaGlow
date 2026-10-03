@@ -20,7 +20,10 @@ void main()
     rgb = vec3(luminance) + plasmaglowSaturation * (rgb - vec3(luminance));
 
     float referenceLuminance = max(destinationReferenceLuminance, 0.001);
-    rgb = pow(max(rgb, vec3(0.0)) / referenceLuminance, vec3(1.0 / gamma)) * referenceLuminance;
+    rgb = max(rgb, vec3(0.0));
+    if (gamma != 1.0) {
+        rgb = pow(rgb / referenceLuminance, vec3(1.0 / gamma)) * referenceLuminance;
+    }
     color.rgb = clamp(rgb, vec3(0.0), vec3(maxDestinationLuminance)) * alpha;
 
     color *= modulation;

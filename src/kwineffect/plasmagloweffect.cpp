@@ -3,6 +3,8 @@
 */
 
 #include "plasmagloweffect.h"
+#include "computesharpening.h"
+#include "screenpass.h"
 
 #include <effect/effecthandler.h>
 #include <scene/item.h>
@@ -16,6 +18,7 @@
 
 #include <QDBusConnection>
 #include <QDebug>
+#include <QLoggingCategory>
 #include <KConfigGroup>
 #include <KConfig>
 #include <KSharedConfig>
@@ -29,6 +32,8 @@ static void ensureResources()
 
 namespace KWin
 {
+
+Q_LOGGING_CATEGORY(plasmaGlowRenderLog, "plasmaglow.render", QtWarningMsg)
 
 PlasmaGlowEffect::PlasmaGlowEffect()
 {
@@ -74,8 +79,9 @@ PlasmaGlowEffect::PlasmaGlowEffect()
         m_lastError = QStringLiteral("Failed to create the color adjustment shader");
         qWarning().noquote() << "PlasmaGlow:" << m_lastError;
     } else {
-        if (m_shader->uniformLocation("plasmaglowSaturation") < 0
-            || m_shader->uniformLocation("gamma") < 0) {
+        m_colorUniforms.saturation = m_shader->uniformLocation("plasmaglowSaturation");
+        m_colorUniforms.gamma = m_shader->uniformLocation("gamma");
+        if (m_colorUniforms.saturation < 0 || m_colorUniforms.gamma < 0) {
             m_shader.reset();
             m_lastError = QStringLiteral("The color adjustment shader is missing required uniforms");
             qWarning().noquote() << "PlasmaGlow:" << m_lastError;
@@ -112,6 +118,7 @@ PlasmaGlowEffect::PlasmaGlowEffect()
 
 PlasmaGlowEffect::~PlasmaGlowEffect()
 {
+    effects->makeOpenGLContextCurrent();
     if (m_dbusRegistered) {
         m_sessionBus.unregisterObject(m_objectPath);
     }
@@ -130,14 +137,22 @@ bool PlasmaGlowEffect::ensureSharpeningShader()
         ShaderTrait::MapTexture,
         QString(),
         QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow.frag"));
-    if (!shader || shader->uniformLocation("plasmaglowSaturation") < 0
-        || shader->uniformLocation("gamma") < 0 || shader->uniformLocation("sharpeningMode") < 0
-        || shader->uniformLocation("sharpeningStrength") < 0 || shader->uniformLocation("sharpeningDenoise") < 0) {
+    ShaderUniforms uniforms;
+    if (shader) {
+        uniforms.saturation = shader->uniformLocation("plasmaglowSaturation");
+        uniforms.gamma = shader->uniformLocation("gamma");
+        uniforms.sharpeningMode = shader->uniformLocation("sharpeningMode");
+        uniforms.sharpeningStrength = shader->uniformLocation("sharpeningStrength");
+        uniforms.sharpeningDenoise = shader->uniformLocation("sharpeningDenoise");
+    }
+    if (!shader || uniforms.saturation < 0 || uniforms.gamma < 0 || uniforms.sharpeningMode < 0
+        || uniforms.sharpeningStrength < 0 || uniforms.sharpeningDenoise < 0) {
         m_lastError = QStringLiteral("Failed to create the sharpening shader");
         qWarning().noquote() << "PlasmaGlow:" << m_lastError;
         return false;
     }
     m_sharpeningShader = std::move(shader);
+    m_sharpeningUniforms = uniforms;
     return true;
 }
 
@@ -176,6 +191,19 @@ int PlasmaGlowEffect::requestedEffectChainPosition() const
 
 QVariantMap PlasmaGlowEffect::state() const
 {
+    QVariantList renderOutputs;
+    for (const auto &[screen, capture] : m_screenCaptures) {
+        if (!capture.texture || capture.lastSharpeningMode < 0) {
+            continue;
+        }
+        renderOutputs.append(QVariantMap{
+            {QStringLiteral("name"), screen->name()},
+            {QStringLiteral("lastRenderPath"), capture.lastPassComputed ? QStringLiteral("compute") : QStringLiteral("fragment")},
+            {QStringLiteral("lastSharpeningMode"), capture.lastSharpeningMode},
+            {QStringLiteral("captureInternalFormat"), capture.texture->internalFormat()},
+            {QStringLiteral("captureTransferFunction"), capture.lastTransferFunction},
+        });
+    }
     return {
         {QStringLiteral("apiVersion"), kApiVersion},
         {QStringLiteral("ready"), m_dbusRegistered && bool(m_shader)},
@@ -185,6 +213,7 @@ QVariantMap PlasmaGlowEffect::state() const
         {QStringLiteral("sharpeningStrength"), m_sharpeningStrength},
         {QStringLiteral("sharpeningDenoise"), m_sharpeningDenoise},
         {QStringLiteral("error"), m_lastError},
+        {QStringLiteral("renderOutputs"), renderOutputs},
     };
 }
 
@@ -279,6 +308,11 @@ void PlasmaGlowEffect::paintScreen(const RenderTarget &renderTarget,
     const bool newTexture = !screenTexture || screenTexture->size() != size
         || screenTexture->internalFormat() != format;
     if (newTexture) {
+        capture.lastSharpeningMode = -1;
+        qCDebug(plasmaGlowRenderLog) << "capture" << size << "format" << Qt::hex << format << Qt::dec
+            << "transfer" << static_cast<int>(renderTarget.colorDescription()->transferFunction().type)
+            << "reference" << renderTarget.colorDescription()->referenceLuminance()
+            << "scale" << viewport.scale() << "transform" << static_cast<int>(viewport.transform().kind());
         screenFramebuffer.reset();
         screenTexture = GLTexture::allocate(format, size);
         if (screenTexture) {
@@ -299,28 +333,11 @@ void PlasmaGlowEffect::paintScreen(const RenderTarget &renderTarget,
                          newTexture ? Region(fboViewport.deviceRect()) : deviceRegion, screen);
     GLFramebuffer::popFramebuffer();
 
-    GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
-    vbo->reset();
-    vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex2DLayout), sizeof(GLVertex2D));
-    const auto mapped = vbo->map<GLVertex2D>(6);
-    if (!mapped) {
-        screenTexture->render(screen->geometry().size());
-        return;
-    }
     const auto scaled = screen->geometry().scaled(viewport.scale());
     const QVector2D topLeft(scaled.left(), scaled.top());
     const QVector2D topRight(scaled.right(), scaled.top());
     const QVector2D bottomLeft(scaled.left(), scaled.bottom());
     const QVector2D bottomRight(scaled.right(), scaled.bottom());
-    auto vertices = *mapped;
-    vertices[0] = {topLeft, {0.0f, 1.0f}};
-    vertices[1] = {bottomRight, {1.0f, 0.0f}};
-    vertices[2] = {bottomLeft, {0.0f, 0.0f}};
-    vertices[3] = {topLeft, {0.0f, 1.0f}};
-    vertices[4] = {topRight, {1.0f, 1.0f}};
-    vertices[5] = {bottomRight, {1.0f, 0.0f}};
-    vbo->unmap();
-
     const auto &description = renderTarget.colorDescription();
     int mode = 0;
     if (m_sharpeningMode != QLatin1String("off")) {
@@ -331,23 +348,60 @@ void PlasmaGlowEffect::paintScreen(const RenderTarget &renderTarget,
             mode = m_sharpeningMode == QLatin1String("cas") ? 1 : 2;
         }
     }
+    const auto transfer = description->transferFunction().type;
+    bool computed = false;
+    if (const auto flipY = computeOutputFlipY(renderTarget, viewport, screen->geometry(), size, deviceRegion, mode)) {
+        if (!m_computeSharpening) {
+            m_computeSharpening = std::make_unique<ComputeSharpening>();
+        }
+        computed = m_computeSharpening->dispatch(screenTexture.get(), renderTarget.texture(), *description,
+            mode, m_saturation, m_gamma, m_sharpeningStrength, m_sharpeningDenoise, *flipY);
+    }
+    capture.lastSharpeningMode = mode;
+    capture.lastTransferFunction = transfer;
+    capture.lastPassComputed = computed;
+    if (newTexture) {
+        qCDebug(plasmaGlowRenderLog) << "sharpening pass" << (computed ? "compute" : "fragment");
+    }
+    if (computed) {
+        return;
+    }
+
+    GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
+    vbo->reset();
+    vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex2DLayout), sizeof(GLVertex2D));
+    const auto mapped = vbo->map<GLVertex2D>(6);
+    if (!mapped) {
+        screenTexture->render(screen->geometry().size());
+        return;
+    }
+    auto vertices = *mapped;
+    vertices[0] = {topLeft, {0.0f, 1.0f}};
+    vertices[1] = {bottomRight, {1.0f, 0.0f}};
+    vertices[2] = {bottomLeft, {0.0f, 0.0f}};
+    vertices[3] = {topLeft, {0.0f, 1.0f}};
+    vertices[4] = {topRight, {1.0f, 1.0f}};
+    vertices[5] = {bottomRight, {1.0f, 0.0f}};
+    vbo->unmap();
+
     // Off uses the original color shader, with no sharpening code or uniforms.
     GLShader *shader = mode == 0 ? m_shader.get() : m_sharpeningShader.get();
+    const ShaderUniforms &uniforms = mode == 0 ? m_colorUniforms : m_sharpeningUniforms;
     screenTexture->bind();
     ShaderManager::instance()->pushShader(shader);
     shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
     shader->setUniform(GLShader::Vec4Uniform::ModulationConstant, QVector4D(1, 1, 1, 1));
-    shader->setUniform("sampler", 0);
-    shader->setUniform("plasmaglowSaturation", static_cast<float>(m_saturation));
-    shader->setUniform("gamma", static_cast<float>(m_gamma));
+    shader->setUniform(GLShader::IntUniform::Sampler, 0);
+    shader->setUniform(uniforms.saturation, static_cast<float>(m_saturation));
+    shader->setUniform(uniforms.gamma, static_cast<float>(m_gamma));
     if (mode != 0) {
-        shader->setUniform("sharpeningMode", mode);
-        shader->setUniform("sharpeningStrength", static_cast<float>(m_sharpeningStrength));
-        shader->setUniform("sharpeningDenoise", static_cast<float>(m_sharpeningDenoise));
+        shader->setUniform(uniforms.sharpeningMode, mode);
+        shader->setUniform(uniforms.sharpeningStrength, static_cast<float>(m_sharpeningStrength));
+        shader->setUniform(uniforms.sharpeningDenoise, static_cast<float>(m_sharpeningDenoise));
     }
     shader->setColorspaceUniforms(description, description, RenderingIntent::RelativeColorimetric);
     vbo->bindArrays();
-    vbo->draw(GL_TRIANGLES, 0, 6);
+    drawScreenPass(vbo, renderTarget, viewport, deviceRegion);
     vbo->unbindArrays();
     ShaderManager::instance()->popShader();
     screenTexture->unbind();

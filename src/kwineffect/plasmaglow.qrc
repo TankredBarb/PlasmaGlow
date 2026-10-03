@@ -4,5 +4,9 @@
     <file alias="shaders/plasmaglow_core.frag">shaders/plasmaglow.frag</file>
     <file alias="shaders/plasmaglow-color.frag">shaders/plasmaglow-color.frag</file>
     <file alias="shaders/plasmaglow-color_core.frag">shaders/plasmaglow-color.frag</file>
+    <file alias="shaders/plasmaglow.comp">shaders/plasmaglow.comp</file>
+</qresource>
+<qresource prefix="/opengl">
+    <file alias="plasmaglow-sharpening.glsl">shaders/plasmaglow-sharpening.glsl</file>
 </qresource>
 </RCC>

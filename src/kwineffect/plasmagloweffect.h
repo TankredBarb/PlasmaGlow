@@ -17,6 +17,7 @@ namespace KWin
 {
 
 class ItemEffect;
+class ComputeSharpening;
 class GLShader;
 class GLTexture;
 class GLFramebuffer;
@@ -70,9 +71,22 @@ private:
     std::unique_ptr<ItemEffect> m_sceneEffect;
     std::unique_ptr<GLShader> m_shader;
     std::unique_ptr<GLShader> m_sharpeningShader;
+    std::unique_ptr<ComputeSharpening> m_computeSharpening;
+    struct ShaderUniforms {
+        int saturation = -1;
+        int gamma = -1;
+        int sharpeningMode = -1;
+        int sharpeningStrength = -1;
+        int sharpeningDenoise = -1;
+    };
+    ShaderUniforms m_colorUniforms;
+    ShaderUniforms m_sharpeningUniforms;
     struct ScreenCapture {
         std::unique_ptr<GLTexture> texture;
         std::unique_ptr<GLFramebuffer> framebuffer;
+        int lastSharpeningMode = -1;
+        int lastTransferFunction = -1;
+        bool lastPassComputed = false;
     };
     std::map<LogicalOutput *, ScreenCapture> m_screenCaptures;
     double m_saturation = 1.0;

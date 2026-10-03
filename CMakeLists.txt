@@ -36,6 +36,10 @@ if(PLASMAGLOW_BUILD_KWIN_EFFECT)
         SOURCES
             src/kwineffect/plasmagloweffect.h
             src/kwineffect/plasmagloweffect.cpp
+            src/kwineffect/computesharpening.h
+            src/kwineffect/computesharpening.cpp
+            src/kwineffect/screenpass.h
+            src/kwineffect/screenpass.cpp
             src/kwineffect/plasmaglow.qrc
         INSTALL_NAMESPACE "kwin/effects/plugins"
     )
@@ -113,6 +117,19 @@ if(PLASMAGLOW_BUILD_TESTS)
         Qt6::Widgets Qt6::DBus Qt6::Qml KF6::CoreAddons KF6::ConfigCore KF6::XmlGui)
     add_test(NAME adjustments COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:plasmaglow-adjustments-test>)
     set_tests_properties(adjustments PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    if(PLASMAGLOW_BUILD_KWIN_EFFECT)
+        add_executable(plasmaglow-sharpening-gpu-test
+            tests/sharpening-gpu.cpp
+            src/kwineffect/computesharpening.cpp
+            src/kwineffect/screenpass.cpp
+            src/kwineffect/plasmaglow.qrc)
+        target_include_directories(plasmaglow-sharpening-gpu-test PRIVATE src/kwineffect)
+        target_compile_features(plasmaglow-sharpening-gpu-test PRIVATE cxx_std_20)
+        target_link_libraries(plasmaglow-sharpening-gpu-test PRIVATE KWin::kwin)
+        add_test(NAME sharpening-gpu COMMAND plasmaglow-sharpening-gpu-test)
+        set_tests_properties(sharpening-gpu PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_FORCE_STDERR_LOGGING=1" SKIP_RETURN_CODE 77 TIMEOUT 60)
+    endif()
 endif()
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

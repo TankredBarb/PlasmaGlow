@@ -1,0 +1,39 @@
+#version 430
+
+#include "colormanagement.glsl"
+#include "plasmaglow-sharpening.glsl"
+
+layout(local_size_x=16, local_size_y=16) in;
+layout(binding=0) writeonly uniform image2D outputImage;
+uniform bool flipOutputY;
+shared vec4 tile[324];
+
+vec3 sampleLinear(ivec2 offset)
+{
+    ivec2 position = ivec2(gl_LocalInvocationID.xy) + offset + 1;
+    vec4 color = tile[position.y * 18 + position.x];
+    return color.rgb / (max(color.a, 0.001) * max(destinationReferenceLuminance, 0.001));
+}
+
+void main()
+{
+    ivec2 size = textureSize(sampler, 0);
+    ivec2 origin = ivec2(gl_WorkGroupID.xy) * 16 - 1;
+    // Share the decoded 18x18 neighbourhood between 256 output pixels.
+    for (uint index = gl_LocalInvocationIndex; index < 324; index += 256) {
+        ivec2 pixel = clamp(origin + ivec2(index % 18, index / 18), ivec2(0), size - 1);
+        tile[index] = decodeSdr(texelFetch(sampler, pixel, 0));
+    }
+    // Even invocations outside an incomplete edge tile must reach the barrier.
+    barrier();
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    ivec2 position = ivec2(gl_LocalInvocationID.xy) + 1;
+    vec4 color = adjustColor(tile[position.y * 18 + position.x]);
+    if (flipOutputY) {
+        pixel.y = size.y - 1 - pixel.y;
+    }
+    imageStore(outputImage, pixel, color);
+}
