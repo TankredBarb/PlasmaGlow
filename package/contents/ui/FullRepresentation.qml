@@ -442,6 +442,50 @@ PlasmaExtras.Representation {
                     }
                     RowLayout {
                         Layout.fillWidth: true
+                        visible: !root.plasmoidItem.controller.isX11
+                        enabled: root.plasmoidItem.controller.backendReady
+                        SettingLabel {
+                            text: "Vibrance"
+                            helpText: "Experimental adaptive saturation. Boost muted colors more than saturated colors, before Saturation. 0% disables Vibrance. Not applied to the login screen."
+                        }
+                        Item { Layout.fillWidth: true }
+                        PlasmaComponents3.Label {
+                            text: Math.round(root.plasmoidItem.controller.vibrance * 100) + "%"
+                            font.bold: true
+                            font.family: "Monospace"
+                            color: root.valueColor("#ff007f")
+                        }
+                    }
+                    NeonSlider {
+                        id: vibranceSlider
+                        objectName: "vibranceSlider"
+                        visible: !root.plasmoidItem.controller.isX11
+                        enabled: root.plasmoidItem.controller.backendReady
+                        from: 0.0; to: 1.0; stepSize: 0.01
+                        value: root.plasmoidItem.controller.vibrance
+                        startColor: "#7f00ff"; accentColor: "#ff007f"; endColor: "#00ffff"
+                        lightTheme: root.lightTheme
+                        directInput: true
+                        onMoved: root.plasmoidItem.controller.vibrance = value
+                        Connections {
+                            target: root.plasmoidItem.controller
+                            function onVibranceChanged() { vibranceSlider.value = root.plasmoidItem.controller.vibrance }
+                        }
+                    }
+                    PresetRow {
+                        objectName: "vibrancePresets"
+                        visible: !root.plasmoidItem.controller.isX11
+                        enabled: root.plasmoidItem.controller.backendReady
+                        values: [0.0, 0.25, 0.5, 1.0]
+                        currentValue: root.plasmoidItem.controller.vibrance
+                        valueScale: 100
+                        decimals: 0
+                        suffix: "%"
+                        onSelected: value => { root.plasmoidItem.controller.vibrance = value }
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
                         visible: root.plasmoidItem.controller.gammaAvailable
                         SettingLabel {
                             text: "Gamma"

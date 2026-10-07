@@ -24,9 +24,9 @@ KWinBackend::KWinBackend(QObject *parent)
 }
 
 quint64 KWinBackend::applyParameters(double saturation, double gamma,
-                                      const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise)
+                                      const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise, double vibrance)
 {
-    if (!std::isfinite(saturation) || !std::isfinite(gamma)
+    if (!std::isfinite(vibrance) || !std::isfinite(saturation) || !std::isfinite(gamma)
         || !std::isfinite(sharpeningStrength) || !std::isfinite(sharpeningDenoise)
         || (sharpeningMode != QLatin1String("off") && sharpeningMode != QLatin1String("cas")
             && sharpeningMode != QLatin1String("luma") && sharpeningMode != QLatin1String("rcas"))) {
@@ -39,6 +39,7 @@ quint64 KWinBackend::applyParameters(double saturation, double gamma,
         sharpeningMode,
         qBound(0.0, sharpeningStrength, 1.0),
         qBound(0.0, sharpeningDenoise, 1.0),
+        qBound(0.0, vibrance, 1.0),
         ++m_nextRequestId
     };
     m_hasPendingParameters = true;
@@ -175,12 +176,14 @@ void KWinBackend::acceptState(const QVariantMap &state)
         return;
     }
 
+    const double vibrance = state.value(QStringLiteral("vibrance")).toDouble();
     const double saturation = state.value(QStringLiteral("saturation")).toDouble();
     const double gamma = state.value(QStringLiteral("gamma")).toDouble();
     const QString sharpeningMode = state.value(QStringLiteral("sharpeningMode")).toString();
     const double sharpeningStrength = state.value(QStringLiteral("sharpeningStrength")).toDouble();
     const double sharpeningDenoise = state.value(QStringLiteral("sharpeningDenoise")).toDouble();
-    if (!state.contains(QStringLiteral("sharpeningStrength")) || !state.contains(QStringLiteral("sharpeningDenoise"))
+    if (!state.contains(QStringLiteral("vibrance")) || !std::isfinite(vibrance) || vibrance < 0.0 || vibrance > 1.0
+        || !state.contains(QStringLiteral("sharpeningStrength")) || !state.contains(QStringLiteral("sharpeningDenoise"))
         || !std::isfinite(sharpeningStrength) || sharpeningStrength < 0.0 || sharpeningStrength > 1.0
         || !std::isfinite(sharpeningDenoise) || sharpeningDenoise < 0.0 || sharpeningDenoise > 1.0
         || (sharpeningMode != QLatin1String("off") && sharpeningMode != QLatin1String("cas")
@@ -193,7 +196,7 @@ void KWinBackend::acceptState(const QVariantMap &state)
     }
 
     setReady(true, state.value(QStringLiteral("error")).toString(), version);
-    Q_EMIT stateChanged(saturation, gamma, sharpeningMode, sharpeningStrength, sharpeningDenoise);
+    Q_EMIT stateChanged(saturation, gamma, sharpeningMode, sharpeningStrength, sharpeningDenoise, vibrance);
     startNextApply();
 }
 
@@ -229,7 +232,7 @@ void KWinBackend::startNextApply()
     QDBusMessage message = QDBusMessage::createMethodCall(m_effectService, m_effectObjectPath,
                                                           m_effectInterface, QStringLiteral("setAllParameters"));
     message.setArguments({parameters.saturation, parameters.gamma, parameters.sharpeningMode,
-                          parameters.sharpeningStrength, parameters.sharpeningDenoise});
+                          parameters.sharpeningStrength, parameters.sharpeningDenoise, parameters.vibrance});
     watchCall(message, [this, parameters, generation](const QDBusMessage &reply) {
         if (generation != m_generation) {
             return;
@@ -247,7 +250,7 @@ void KWinBackend::startNextApply()
 
         if (success) {
             Q_EMIT stateChanged(parameters.saturation, parameters.gamma, parameters.sharpeningMode,
-                                parameters.sharpeningStrength, parameters.sharpeningDenoise);
+                                parameters.sharpeningStrength, parameters.sharpeningDenoise, parameters.vibrance);
         } else {
             // A rejected adjustment does not make the working color effect
             // unavailable. Keep Off and the color controls usable.
@@ -255,7 +258,7 @@ void KWinBackend::startNextApply()
         }
         Q_EMIT applyFinished(parameters.requestId, success, error,
                              parameters.saturation, parameters.gamma, parameters.sharpeningMode,
-                             parameters.sharpeningStrength, parameters.sharpeningDenoise);
+                             parameters.sharpeningStrength, parameters.sharpeningDenoise, parameters.vibrance);
         startNextApply();
     });
 }

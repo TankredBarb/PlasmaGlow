@@ -3,13 +3,30 @@
 
 #include <core/colorspace.h>
 #include <opengl/gltexture.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 #include <QFile>
 #include <QDebug>
 
 namespace KWin
 {
 
-ComputeSharpening::ComputeSharpening()
+std::unique_ptr<GLShader> loadPlasmaGlowShader(const QString &fileName, bool vibrance)
+{
+    if (!vibrance) {
+        return ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), fileName);
+    }
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return nullptr;
+    }
+    QByteArray source = file.readAll();
+    source.replace("#version 140", "#version 140\n#define PLASMAGLOW_VIBRANCE");
+    return ShaderManager::instance()->generateCustomShader(ShaderTrait::MapTexture, {}, source);
+}
+
+ComputeSharpening::ComputeSharpening(bool vibrance)
+    : m_vibranceEnabled(vibrance)
 {
     if (!epoxy_is_desktop_gl() || epoxy_gl_version() < 43) {
         return;
@@ -19,6 +36,9 @@ ComputeSharpening::ComputeSharpening()
         return;
     }
     QByteArray source = file.readAll();
+    if (vibrance) {
+        source.replace("#version 430", "#version 430\n#define PLASMAGLOW_VIBRANCE");
+    }
     // GLShader preprocesses vertex/fragment programs to GLSL 140. Compute
     // needs GLSL 430, but uses the same KWin color conversion resource.
     for (const char *name : {"colormanagement.glsl", "plasmaglow-sharpening.glsl"}) {
@@ -57,7 +77,7 @@ ComputeSharpening::ComputeSharpening()
         return;
     }
     const char *names[] = {
-        "sampler", "modulation", "plasmaglowSaturation", "gamma", "sharpeningMode",
+        "sampler", "modulation", "plasmaglowSaturation", "plasmaglowVibrance", "gamma", "sharpeningMode",
         "sharpeningStrength", "sharpeningDenoise", "sourceNamedTransferFunction",
         "destinationNamedTransferFunction", "sourceTransferFunctionParams",
         "destinationTransferFunctionParams", "destinationReferenceLuminance",
@@ -65,7 +85,7 @@ ComputeSharpening::ComputeSharpening()
     };
     for (int i = 0; i < UniformCount; ++i) {
         m_uniforms[i] = glGetUniformLocation(m_program, names[i]);
-        if (m_uniforms[i] < 0) {
+        if (m_uniforms[i] < 0 && (i != Vibrance || m_vibranceEnabled)) {
             qWarning() << "PlasmaGlow: missing compute uniform" << names[i];
             glDeleteProgram(m_program);
             m_program = 0;
@@ -83,7 +103,7 @@ ComputeSharpening::~ComputeSharpening()
 
 bool ComputeSharpening::dispatch(GLTexture *source, GLTexture *destination,
                                 const ColorDescription &description, int mode,
-                                float saturation, float gamma, float strength, float denoise, bool flipY)
+                                float saturation, float gamma, float strength, float denoise, bool flipY, float vibrance)
 {
     if (!m_program || glIsEnabled(GL_BLEND) || glIsEnabled(GL_SCISSOR_TEST)
         || glIsEnabled(GL_DEPTH_TEST) || glIsEnabled(GL_STENCIL_TEST)
@@ -118,6 +138,9 @@ bool ComputeSharpening::dispatch(GLTexture *source, GLTexture *destination,
     glUniform1i(m_uniforms[Sampler], 0);
     glUniform4f(m_uniforms[Modulation], 1, 1, 1, 1);
     glUniform1f(m_uniforms[Saturation], saturation);
+    if (m_vibranceEnabled) {
+        glUniform1f(m_uniforms[Vibrance], vibrance);
+    }
     glUniform1f(m_uniforms[Gamma], gamma);
     glUniform1i(m_uniforms[Mode], mode);
     glUniform1f(m_uniforms[Strength], strength);

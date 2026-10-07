@@ -56,6 +56,10 @@ PlasmaGlowEffect::PlasmaGlowEffect()
     }
 
     if (!m_isGreeter && enabled) {
+        const double vibrance = settings.readEntry(QStringLiteral("vibrance"), 0.0);
+        if (std::isfinite(vibrance) && vibrance >= 0.0 && vibrance <= 1.0) {
+            m_vibrance = vibrance;
+        }
         const QString mode = settings.readEntry(QStringLiteral("sharpeningMode"), QStringLiteral("off"));
         if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma") || mode == QLatin1String("rcas")) {
             m_sharpeningMode = mode;
@@ -70,25 +74,11 @@ PlasmaGlowEffect::PlasmaGlowEffect()
         }
     }
 
-    m_shader = ShaderManager::instance()->generateShaderFromFile(
-        ShaderTrait::MapTexture,
-        QString(),
-        QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow-color.frag"));
-
-    if (!m_shader) {
-        m_lastError = QStringLiteral("Failed to create the color adjustment shader");
-        qWarning().noquote() << "PlasmaGlow:" << m_lastError;
-    } else {
-        m_colorUniforms.saturation = m_shader->uniformLocation("plasmaglowSaturation");
-        m_colorUniforms.gamma = m_shader->uniformLocation("gamma");
-        if (m_colorUniforms.saturation < 0 || m_colorUniforms.gamma < 0) {
-            m_shader.reset();
-            m_lastError = QStringLiteral("The color adjustment shader is missing required uniforms");
-            qWarning().noquote() << "PlasmaGlow:" << m_lastError;
-        }
+    ensureColorShader(false);
+    if (m_vibrance != 0.0 && !ensureColorShader(true)) {
+        m_vibrance = 0.0;
     }
-
-    if (m_shader && m_sharpeningMode != QLatin1String("off") && !ensureSharpeningShader()) {
+    if (m_shader && m_sharpeningMode != QLatin1String("off") && !ensureSharpeningShader(m_vibrance != 0.0)) {
         m_sharpeningMode = QStringLiteral("off");
     }
 
@@ -127,32 +117,54 @@ PlasmaGlowEffect::~PlasmaGlowEffect()
     }
 }
 
-bool PlasmaGlowEffect::ensureSharpeningShader()
+bool PlasmaGlowEffect::ensureColorShader(bool vibrance)
 {
-    if (m_sharpeningShader) {
+    auto &program = vibrance ? m_vibranceShader : m_shader;
+    if (program) {
         return true;
     }
     effects->makeOpenGLContextCurrent();
-    auto shader = ShaderManager::instance()->generateShaderFromFile(
-        ShaderTrait::MapTexture,
-        QString(),
-        QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow.frag"));
+    auto shader = loadPlasmaGlowShader(QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow-color.frag"), vibrance);
     ShaderUniforms uniforms;
     if (shader) {
+        uniforms.vibrance = shader->uniformLocation("plasmaglowVibrance");
+        uniforms.saturation = shader->uniformLocation("plasmaglowSaturation");
+        uniforms.gamma = shader->uniformLocation("gamma");
+    }
+    if (!shader || (vibrance && uniforms.vibrance < 0) || uniforms.saturation < 0 || uniforms.gamma < 0) {
+        m_lastError = QStringLiteral("Failed to create the color adjustment shader");
+        qWarning().noquote() << "PlasmaGlow:" << m_lastError;
+        return false;
+    }
+    program = std::move(shader);
+    m_colorUniforms[vibrance] = uniforms;
+    return true;
+}
+
+bool PlasmaGlowEffect::ensureSharpeningShader(bool vibrance)
+{
+    if (m_sharpeningShader[vibrance]) {
+        return true;
+    }
+    effects->makeOpenGLContextCurrent();
+    auto shader = loadPlasmaGlowShader(QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow.frag"), vibrance);
+    ShaderUniforms uniforms;
+    if (shader) {
+        uniforms.vibrance = shader->uniformLocation("plasmaglowVibrance");
         uniforms.saturation = shader->uniformLocation("plasmaglowSaturation");
         uniforms.gamma = shader->uniformLocation("gamma");
         uniforms.sharpeningMode = shader->uniformLocation("sharpeningMode");
         uniforms.sharpeningStrength = shader->uniformLocation("sharpeningStrength");
         uniforms.sharpeningDenoise = shader->uniformLocation("sharpeningDenoise");
     }
-    if (!shader || uniforms.saturation < 0 || uniforms.gamma < 0 || uniforms.sharpeningMode < 0
+    if (!shader || (vibrance && uniforms.vibrance < 0) || uniforms.saturation < 0 || uniforms.gamma < 0 || uniforms.sharpeningMode < 0
         || uniforms.sharpeningStrength < 0 || uniforms.sharpeningDenoise < 0) {
         m_lastError = QStringLiteral("Failed to create the sharpening shader");
         qWarning().noquote() << "PlasmaGlow:" << m_lastError;
         return false;
     }
-    m_sharpeningShader = std::move(shader);
-    m_sharpeningUniforms = uniforms;
+    m_sharpeningShader[vibrance] = std::move(shader);
+    m_sharpeningUniforms[vibrance] = uniforms;
     return true;
 }
 
@@ -164,7 +176,7 @@ bool PlasmaGlowEffect::supported()
 bool PlasmaGlowEffect::isActive() const
 {
     return (m_isGreeter || m_dbusRegistered) && m_shader
-        && (m_saturation != 1.0 || m_gamma != 1.0 || m_sharpeningMode != QLatin1String("off"));
+        && (m_vibrance != 0.0 || m_saturation != 1.0 || m_gamma != 1.0 || m_sharpeningMode != QLatin1String("off"));
 }
 
 bool PlasmaGlowEffect::blocksDirectScanout() const
@@ -207,6 +219,7 @@ QVariantMap PlasmaGlowEffect::state() const
     return {
         {QStringLiteral("apiVersion"), kApiVersion},
         {QStringLiteral("ready"), m_dbusRegistered && bool(m_shader)},
+        {QStringLiteral("vibrance"), m_vibrance},
         {QStringLiteral("saturation"), m_saturation},
         {QStringLiteral("gamma"), m_gamma},
         {QStringLiteral("sharpeningMode"), m_sharpeningMode},
@@ -224,13 +237,14 @@ QVariantMap PlasmaGlowEffect::getState() const
 
 bool PlasmaGlowEffect::setParameters(double saturation, double gamma)
 {
-    return setAllParameters(saturation, gamma, m_sharpeningMode, m_sharpeningStrength, m_sharpeningDenoise);
+    return setAllParameters(saturation, gamma, m_sharpeningMode, m_sharpeningStrength, m_sharpeningDenoise, m_vibrance);
 }
 
 bool PlasmaGlowEffect::setAllParameters(double saturation, double gamma, const QString &sharpeningMode,
-                                       double sharpeningStrength, double sharpeningDenoise)
+                                       double sharpeningStrength, double sharpeningDenoise, double vibrance)
 {
-    if (!std::isfinite(saturation) || !std::isfinite(gamma)
+    if (!std::isfinite(vibrance) || vibrance < 0.0 || vibrance > 1.0
+        || !std::isfinite(saturation) || !std::isfinite(gamma)
         || saturation < kMinimumSaturation || saturation > kMaximumSaturation
         || gamma < kMinimumGamma || gamma > kMaximumGamma
         || (sharpeningMode != QLatin1String("off") && sharpeningMode != QLatin1String("cas")
@@ -250,21 +264,23 @@ bool PlasmaGlowEffect::setAllParameters(double saturation, double gamma, const Q
         return false;
     }
 
-    if (sharpeningMode != QLatin1String("off") && !ensureSharpeningShader()) {
+    if (!ensureColorShader(vibrance != 0.0)
+        || (sharpeningMode != QLatin1String("off") && !ensureSharpeningShader(vibrance != 0.0))) {
         Q_EMIT stateChanged(state());
         return false;
     }
     m_lastError.clear();
-    if (m_saturation == saturation && m_gamma == gamma
+    if (m_vibrance == vibrance && m_saturation == saturation && m_gamma == gamma
         && m_sharpeningMode == sharpeningMode && m_sharpeningStrength == sharpeningStrength
         && m_sharpeningDenoise == sharpeningDenoise) {
         return true;
     }
 
-    const bool repaint = m_saturation != saturation || m_gamma != gamma
+    const bool repaint = m_vibrance != vibrance || m_saturation != saturation || m_gamma != gamma
         || m_sharpeningMode != sharpeningMode
         || (sharpeningMode != QLatin1String("off")
             && (m_sharpeningStrength != sharpeningStrength || m_sharpeningDenoise != sharpeningDenoise));
+    m_vibrance = vibrance;
     m_saturation = saturation;
     m_gamma = gamma;
     m_sharpeningMode = sharpeningMode;
@@ -350,13 +366,14 @@ void PlasmaGlowEffect::paintScreen(const RenderTarget &renderTarget,
         }
     }
     const auto transfer = description->transferFunction().type;
+    const bool vibrance = m_vibrance != 0.0;
     bool computed = false;
     if (const auto flipY = computeOutputFlipY(renderTarget, viewport, screen->geometry(), size, deviceRegion, mode)) {
-        if (!m_computeSharpening) {
-            m_computeSharpening = std::make_unique<ComputeSharpening>();
+        if (!m_computeSharpening[vibrance]) {
+            m_computeSharpening[vibrance] = std::make_unique<ComputeSharpening>(vibrance);
         }
-        computed = m_computeSharpening->dispatch(screenTexture.get(), renderTarget.texture(), *description,
-            mode, m_saturation, m_gamma, m_sharpeningStrength, m_sharpeningDenoise, *flipY);
+        computed = m_computeSharpening[vibrance]->dispatch(screenTexture.get(), renderTarget.texture(), *description,
+            mode, m_saturation, m_gamma, m_sharpeningStrength, m_sharpeningDenoise, *flipY, m_vibrance);
     }
     capture.lastSharpeningMode = mode;
     capture.lastTransferFunction = transfer;
@@ -386,13 +403,16 @@ void PlasmaGlowEffect::paintScreen(const RenderTarget &renderTarget,
     vbo->unmap();
 
     // Off uses the original color shader, with no sharpening code or uniforms.
-    GLShader *shader = mode == 0 ? m_shader.get() : m_sharpeningShader.get();
-    const ShaderUniforms &uniforms = mode == 0 ? m_colorUniforms : m_sharpeningUniforms;
+    GLShader *shader = mode == 0 ? (vibrance ? m_vibranceShader.get() : m_shader.get()) : m_sharpeningShader[vibrance].get();
+    const ShaderUniforms &uniforms = mode == 0 ? m_colorUniforms[vibrance] : m_sharpeningUniforms[vibrance];
     screenTexture->bind();
     ShaderManager::instance()->pushShader(shader);
     shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
     shader->setUniform(GLShader::Vec4Uniform::ModulationConstant, QVector4D(1, 1, 1, 1));
     shader->setUniform(GLShader::IntUniform::Sampler, 0);
+    if (vibrance) {
+        shader->setUniform(uniforms.vibrance, static_cast<float>(m_vibrance));
+    }
     shader->setUniform(uniforms.saturation, static_cast<float>(m_saturation));
     shader->setUniform(uniforms.gamma, static_cast<float>(m_gamma));
     if (mode != 0) {

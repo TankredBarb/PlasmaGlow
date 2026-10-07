@@ -16,17 +16,17 @@ public:
     explicit KWinBackend(QObject *parent = nullptr);
 
     quint64 applyParameters(double saturation, double gamma,
-                            const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise);
+                            const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise, double vibrance);
     void refresh();
     bool isRefreshing() const;
 
 Q_SIGNALS:
     void readinessChanged(bool ready, const QString &error, uint apiVersion);
     void stateChanged(double saturation, double gamma,
-                      const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise);
+                      const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise, double vibrance);
     void applyFinished(quint64 requestId, bool success, const QString &error,
                        double saturation, double gamma,
-                       const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise);
+                       const QString &sharpeningMode, double sharpeningStrength, double sharpeningDenoise, double vibrance);
 
 private Q_SLOTS:
     void handleServiceOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);
@@ -39,10 +39,11 @@ private:
         QString sharpeningMode = QStringLiteral("off");
         double sharpeningStrength = 0.5;
         double sharpeningDenoise = 0.17;
+        double vibrance = 0.0;
         quint64 requestId = 0;
     };
 
-    static constexpr uint apiVersion = 2;
+    static constexpr uint apiVersion = 3;
     static constexpr int callTimeoutMs = 2000;
     static constexpr double minimumSaturation = 0.0;
     static constexpr double maximumSaturation = 4.0;

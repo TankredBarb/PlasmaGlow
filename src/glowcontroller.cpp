@@ -24,6 +24,7 @@ constexpr unsigned gammaSetting = 4;
 constexpr unsigned loginSetting = 8;
 constexpr unsigned sharpeningSetting = 16;
 constexpr unsigned enabledSetting = 32;
+constexpr unsigned vibranceSetting = 64;
 
 double readSetting(KConfigGroup &group, const QString &key, double fallback, double minimum, double maximum)
 {
@@ -39,6 +40,7 @@ GlowController::GlowController(QObject *parent)
     KConfigGroup group(config, QStringLiteral("General"));
     m_output = group.readEntry(QStringLiteral("output"), QString());
     m_saturation = readSetting(group, QStringLiteral("saturation"), 1.0, minimumSaturation, maximumSaturation);
+    m_vibrance = readSetting(group, QStringLiteral("vibrance"), 0.0, 0.0, 1.0);
     m_gamma = readSetting(group, QStringLiteral("gamma"), 1.0, minimumGamma, maximumGamma);
     const QString mode = group.readEntry(QStringLiteral("sharpeningMode"), QStringLiteral("off"));
     if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma") || mode == QLatin1String("rcas")) {
@@ -72,12 +74,14 @@ GlowController::GlowController(QObject *parent)
             }
         });
         connect(m_kwinBackend, &KWinBackend::stateChanged, this,
-                [this](double saturation, double gamma, const QString &mode, double strength, double denoise) {
+                [this](double saturation, double gamma, const QString &mode, double strength, double denoise, double vibrance) {
             bool changed = false;
-            if (!qFuzzyCompare(m_appliedSaturation, saturation)
+            if (!qFuzzyCompare(m_appliedVibrance + 1.0, vibrance + 1.0)
+                || !qFuzzyCompare(m_appliedSaturation, saturation)
                 || !qFuzzyCompare(m_appliedGamma, gamma)
                 || m_appliedSharpeningMode != mode || !qFuzzyCompare(m_appliedSharpeningStrength, strength)
                 || !qFuzzyCompare(m_appliedSharpeningDenoise, denoise)) {
+                m_appliedVibrance = vibrance;
                 m_appliedSaturation = saturation;
                 m_appliedGamma = gamma;
                 m_appliedSharpeningMode = mode;
@@ -86,18 +90,20 @@ GlowController::GlowController(QObject *parent)
                 changed = true;
             }
             if (m_adjustmentsEnabled && !m_localApplyPending
-                && (!qFuzzyCompare(m_saturation, saturation) || !qFuzzyCompare(m_gamma, gamma)
+                && (!qFuzzyCompare(m_vibrance + 1.0, vibrance + 1.0) || !qFuzzyCompare(m_saturation, saturation) || !qFuzzyCompare(m_gamma, gamma)
                     || m_sharpeningMode != mode || !qFuzzyCompare(m_sharpeningStrength, strength)
                     || !qFuzzyCompare(m_sharpeningDenoise, denoise))) {
+                m_vibrance = vibrance;
                 m_saturation = saturation;
                 m_gamma = gamma;
                 m_sharpeningMode = mode;
                 m_sharpeningStrength = strength;
                 m_sharpeningDenoise = denoise;
+                Q_EMIT vibranceChanged();
                 Q_EMIT saturationChanged();
                 Q_EMIT gammaChanged();
                 Q_EMIT sharpeningChanged();
-                saveSettings(saturationSetting | gammaSetting | sharpeningSetting);
+                saveSettings(saturationSetting | gammaSetting | sharpeningSetting | vibranceSetting);
             }
             if (changed) {
                 Q_EMIT appliedStateChanged();
@@ -105,7 +111,7 @@ GlowController::GlowController(QObject *parent)
         });
         connect(m_kwinBackend, &KWinBackend::applyFinished, this,
                 [this](quint64 requestId, bool success, const QString &error,
-                       double saturation, double gamma, const QString &mode, double strength, double denoise) {
+                       double saturation, double gamma, const QString &mode, double strength, double denoise, double vibrance) {
             if (requestId != m_latestApplyRequestId) {
                 return;
             }
@@ -116,12 +122,14 @@ GlowController::GlowController(QObject *parent)
                 return;
             }
             m_localApplyPending = false;
-            if (qFuzzyCompare(m_appliedSaturation, saturation)
+            if (qFuzzyCompare(m_appliedVibrance + 1.0, vibrance + 1.0)
+                && qFuzzyCompare(m_appliedSaturation, saturation)
                 && qFuzzyCompare(m_appliedGamma, gamma)
                 && m_appliedSharpeningMode == mode && qFuzzyCompare(m_appliedSharpeningStrength, strength)
                 && qFuzzyCompare(m_appliedSharpeningDenoise, denoise)) {
                 return;
             }
+            m_appliedVibrance = vibrance;
             m_appliedSaturation = saturation;
             m_appliedGamma = gamma;
             m_appliedSharpeningMode = mode;
@@ -314,6 +322,32 @@ void GlowController::showAboutDialog()
     m_aboutDialog->show();
     m_aboutDialog->raise();
     m_aboutDialog->activateWindow();
+}
+
+double GlowController::vibrance() const
+{
+    return m_vibrance;
+}
+
+void GlowController::setVibrance(double value)
+{
+    if (!std::isfinite(value)) {
+        return;
+    }
+    value = qBound(0.0, value, 1.0);
+    if (qFuzzyCompare(m_vibrance + 1.0, value + 1.0)) {
+        return;
+    }
+    m_vibrance = value;
+    ++m_userActionRevision;
+    Q_EMIT vibranceChanged();
+    saveSettings(vibranceSetting);
+    applyWaylandParameters(m_saturation, m_gamma);
+}
+
+double GlowController::appliedVibrance() const
+{
+    return m_appliedVibrance;
 }
 
 double GlowController::saturation() const
@@ -520,6 +554,8 @@ void GlowController::reset()
 {
     const bool saturationWasChanged = !qFuzzyCompare(m_saturation, 1.0);
     const bool gammaWasChanged = !qFuzzyCompare(m_gamma, 1.0);
+    m_vibrance = 0.0;
+    Q_EMIT vibranceChanged();
     m_saturation = 1.0;
     m_gamma = 1.0;
     m_sharpeningMode = QStringLiteral("off");
@@ -535,7 +571,7 @@ void GlowController::reset()
     if (gammaWasChanged) {
         Q_EMIT gammaChanged();
     }
-    saveSettings(saturationSetting | gammaSetting | sharpeningSetting);
+    saveSettings(saturationSetting | gammaSetting | sharpeningSetting | vibranceSetting);
 
     if (m_kwinBackend) {
         applyWaylandParameters(m_saturation, m_gamma);
@@ -592,6 +628,9 @@ void GlowController::flushSettings()
     KConfigGroup group(config, QStringLiteral("General"));
     if (m_dirtySettings & outputSetting) {
         group.writeEntry(QStringLiteral("output"), m_output);
+    }
+    if (m_dirtySettings & vibranceSetting) {
+        group.writeEntry(QStringLiteral("vibrance"), m_vibrance);
     }
     if (m_dirtySettings & saturationSetting) {
         group.writeEntry(QStringLiteral("saturation"), m_saturation);
@@ -704,5 +743,5 @@ void GlowController::applyWaylandParameters(double saturation, double gamma)
     m_latestApplyRequestId = m_kwinBackend->applyParameters(m_adjustmentsEnabled ? saturation : 1.0,
                                                             m_adjustmentsEnabled ? gamma : 1.0,
                                                             m_adjustmentsEnabled ? m_sharpeningMode : QStringLiteral("off"),
-                                                            m_sharpeningStrength, m_sharpeningDenoise);
+                                                            m_sharpeningStrength, m_sharpeningDenoise, m_adjustmentsEnabled ? m_vibrance : 0.0);
 }

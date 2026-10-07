@@ -11,6 +11,7 @@
 #include <KSharedConfig>
 
 #include <functional>
+#include <limits>
 #include <iostream>
 #include <cstdlib>
 
@@ -27,13 +28,14 @@ class MockGlow : public QObject
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.kde.plasmaglow.Effect1")
 public:
-    QVariantMap values{{QStringLiteral("apiVersion"), 2u}, {QStringLiteral("ready"), true}, {QStringLiteral("saturation"), 1.0}, {QStringLiteral("gamma"), 1.0},
+    QVariantMap values{{QStringLiteral("apiVersion"), 3u}, {QStringLiteral("ready"), true}, {QStringLiteral("vibrance"), 0.0}, {QStringLiteral("saturation"), 1.0}, {QStringLiteral("gamma"), 1.0},
                        {QStringLiteral("sharpeningMode"), QStringLiteral("off")}, {QStringLiteral("sharpeningStrength"), 0.5}, {QStringLiteral("sharpeningDenoise"), 0.17}, {QStringLiteral("error"), QString()}};
     int calls = 0;
 public Q_SLOTS:
     QVariantMap getState() { return values; }
-    bool setAllParameters(double saturation, double gamma, const QString &mode, double strength, double denoise)
+    bool setAllParameters(double saturation, double gamma, const QString &mode, double strength, double denoise, double vibrance)
     {
+        values[QStringLiteral("vibrance")] = vibrance;
         values[QStringLiteral("saturation")] = saturation;
         values[QStringLiteral("gamma")] = gamma;
         values[QStringLiteral("sharpeningMode")] = mode;
@@ -68,7 +70,7 @@ static void waitFor(const std::function<bool()> &done)
 
 static void checkSavedValues(const GlowController &controller)
 {
-    require(controller.saturation() == 2.0 && controller.gamma() == 0.9
+    require(controller.vibrance() == 0.5 && controller.saturation() == 2.0 && controller.gamma() == 0.9
                 && controller.sharpeningMode() == QStringLiteral("luma") && controller.sharpeningStrength() == 0.75
                 && controller.sharpeningDenoise() == 0.25,
             "Disabling or refreshing lost selected values");
@@ -91,35 +93,49 @@ int main(int argc, char **argv)
         GlowController controller;
         waitFor([&] { return controller.backendReady() && effect.calls > 0; });
         require(controller.adjustmentsEnabled(), "Existing users must default to enabled");
+        require(controller.vibrance() == 0.0, "Vibrance must default to neutral");
+        controller.setVibrance(std::numeric_limits<double>::quiet_NaN());
+        require(controller.vibrance() == 0.0, "Vibrance accepted NaN");
+        controller.setVibrance(2.0);
+        require(controller.vibrance() == 1.0, "Vibrance upper clamp failed");
+        controller.setVibrance(-1.0);
+        require(controller.vibrance() == 0.0, "Vibrance lower clamp failed");
+        controller.setVibrance(0.5);
         controller.setSaturation(2.0);
         controller.setGamma(0.9);
         controller.setSharpeningMode(QStringLiteral("luma"));
         controller.setSharpeningStrength(0.75);
         controller.setSharpeningDenoise(0.25);
-        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("luma") && controller.appliedGamma() == 0.9; });
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("luma") && controller.appliedGamma() == 0.9 && controller.appliedVibrance() == 0.5; });
         controller.setAdjustmentsEnabled(false);
         controller.refresh();
         waitFor([&] { return controller.backendReady() && controller.appliedSaturation() == 1.0 && controller.appliedGamma() == 1.0
-                            && controller.appliedSharpeningMode() == QStringLiteral("off"); });
+                            && controller.appliedSharpeningMode() == QStringLiteral("off") && controller.appliedVibrance() == 0.0; });
         checkSavedValues(controller);
         controller.refresh();
         waitFor([&] { return controller.backendReady(); });
         checkSavedValues(controller);
+        controller.setVibrance(0.75);
+        waitFor([&] { return effect.values[QStringLiteral("vibrance")].toDouble() == 0.0; });
+        require(controller.vibrance() == 0.75 && controller.appliedVibrance() == 0.0,
+                "Editing paused Vibrance enabled it or lost the selected value");
+        controller.setVibrance(0.5);
         controller.setAdjustmentsEnabled(true);
         waitFor([&] { return controller.appliedSaturation() == 2.0 && controller.appliedGamma() == 0.9
                             && controller.appliedSharpeningMode() == QStringLiteral("luma")
-                            && controller.appliedSharpeningStrength() == 0.75 && controller.appliedSharpeningDenoise() == 0.25; });
+                            && controller.appliedSharpeningStrength() == 0.75 && controller.appliedSharpeningDenoise() == 0.25 && controller.appliedVibrance() == 0.5; });
         // Toggle while earlier D-Bus applies are still queued.
         controller.setAdjustmentsEnabled(false);
         controller.setAdjustmentsEnabled(true);
         controller.setAdjustmentsEnabled(false);
         waitFor([&] { return controller.appliedSaturation() == 1.0 && controller.appliedGamma() == 1.0
-                            && controller.appliedSharpeningMode() == QStringLiteral("off"); });
+                            && controller.appliedSharpeningMode() == QStringLiteral("off") && controller.appliedVibrance() == 0.0; });
     }
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmaglowrc"));
     config->reparseConfiguration();
     KConfigGroup group(config, QStringLiteral("General"));
     require(!group.readEntry(QStringLiteral("adjustmentsEnabled"), true) && group.readEntry(QStringLiteral("saturation"), 1.0) == 2.0
+                && group.readEntry(QStringLiteral("vibrance"), 0.0) == 0.5
                 && group.readEntry(QStringLiteral("gamma"), 1.0) == 0.9 && group.readEntry(QStringLiteral("sharpeningMode"), QString()) == QStringLiteral("luma"),
             "Disabled state or selected settings not persisted");
     {
@@ -131,11 +147,11 @@ int main(int argc, char **argv)
         require(effect.values[QStringLiteral("saturation")].toDouble() == 1.0 && effect.values[QStringLiteral("gamma")].toDouble() == 1.0
                     && effect.values[QStringLiteral("sharpeningMode")].toString() == QStringLiteral("off"), "Startup enabled a paused effect");
         controller.setAdjustmentsEnabled(true);
-        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("luma") && controller.appliedSaturation() == 2.0; });
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("luma") && controller.appliedSaturation() == 2.0 && controller.appliedVibrance() == 0.5; });
         controller.setAdjustmentsEnabled(false);
         controller.reset();
-        waitFor([&] { return controller.appliedSaturation() == 1.0 && controller.appliedSharpeningMode() == QStringLiteral("off"); });
-        require(!controller.adjustmentsEnabled() && controller.saturation() == 1.0 && controller.gamma() == 1.0,
+        waitFor([&] { return controller.appliedSaturation() == 1.0 && controller.appliedSharpeningMode() == QStringLiteral("off") && controller.appliedVibrance() == 0.0; });
+        require(!controller.adjustmentsEnabled() && controller.vibrance() == 0.0 && controller.saturation() == 1.0 && controller.gamma() == 1.0,
                 "Reset enabled adjustments");
         controller.showAboutDialog();
         controller.showAboutDialog();
@@ -160,7 +176,7 @@ int main(int argc, char **argv)
         controller.setSharpeningMode(QStringLiteral("nis"));
         require(controller.sharpeningMode() == QStringLiteral("rcas"), "Invalid mode replaced RCAS");
         controller.setAdjustmentsEnabled(false);
-        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("off"); });
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("off") && controller.appliedVibrance() == 0.0; });
     }
     {
         GlowController controller;
@@ -174,9 +190,9 @@ int main(int argc, char **argv)
             waitFor([&] { return controller.appliedSharpeningMode() == mode; });
         }
         controller.reset();
-        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("off"); });
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("off") && controller.appliedVibrance() == 0.0; });
     }
-    std::cout << "PASS disable/restore, refresh, rapid toggles, persistence, paused startup/reset, native About dialog, RCAS persistence/transitions/reset\n";
+    std::cout << "PASS disable/restore, refresh, rapid toggles, persistence, paused startup/reset, native About dialog, Vibrance bounds/default/persistence/disable/reset, RCAS persistence/transitions/reset\n";
     return 0;
 }
 

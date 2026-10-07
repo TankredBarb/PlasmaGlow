@@ -10,6 +10,7 @@
 #include <QString>
 #include <QVariantMap>
 
+#include <array>
 #include <map>
 #include <memory>
 
@@ -41,7 +42,7 @@ public Q_SLOTS:
     Q_SCRIPTABLE QVariantMap getState() const;
     Q_SCRIPTABLE bool setParameters(double saturation, double gamma);
     Q_SCRIPTABLE bool setAllParameters(double saturation, double gamma, const QString &sharpeningMode,
-                                      double sharpeningStrength, double sharpeningDenoise);
+                                      double sharpeningStrength, double sharpeningDenoise, double vibrance);
 
 Q_SIGNALS:
     Q_SCRIPTABLE void stateChanged(const QVariantMap &state);
@@ -56,31 +57,34 @@ protected:
 
 private:
     QVariantMap state() const;
-    bool ensureSharpeningShader();
+    bool ensureColorShader(bool vibrance);
+    bool ensureSharpeningShader(bool vibrance);
     void updateSceneEffect();
 
     static constexpr double kMinimumSaturation = 0.0;
     static constexpr double kMaximumSaturation = 4.0;
     static constexpr double kMinimumGamma = 0.1;
     static constexpr double kMaximumGamma = 5.0;
-    static constexpr uint kApiVersion = 2;
+    static constexpr uint kApiVersion = 3;
 
     const QString m_dbusService = QStringLiteral("org.kde.PlasmaGlow");
     const QString m_objectPath = QStringLiteral("/org/kde/PlasmaGlow");
     QDBusConnection m_sessionBus = QDBusConnection::sessionBus();
     std::unique_ptr<ItemEffect> m_sceneEffect;
     std::unique_ptr<GLShader> m_shader;
-    std::unique_ptr<GLShader> m_sharpeningShader;
-    std::unique_ptr<ComputeSharpening> m_computeSharpening;
+    std::unique_ptr<GLShader> m_vibranceShader;
+    std::array<std::unique_ptr<GLShader>, 2> m_sharpeningShader;
+    std::array<std::unique_ptr<ComputeSharpening>, 2> m_computeSharpening;
     struct ShaderUniforms {
+        int vibrance = -1;
         int saturation = -1;
         int gamma = -1;
         int sharpeningMode = -1;
         int sharpeningStrength = -1;
         int sharpeningDenoise = -1;
     };
-    ShaderUniforms m_colorUniforms;
-    ShaderUniforms m_sharpeningUniforms;
+    std::array<ShaderUniforms, 2> m_colorUniforms;
+    std::array<ShaderUniforms, 2> m_sharpeningUniforms;
     struct ScreenCapture {
         std::unique_ptr<GLTexture> texture;
         std::unique_ptr<GLFramebuffer> framebuffer;
@@ -89,6 +93,7 @@ private:
         bool lastPassComputed = false;
     };
     std::map<LogicalOutput *, ScreenCapture> m_screenCaptures;
+    double m_vibrance = 0.0;
     double m_saturation = 1.0;
     double m_gamma = 1.0;
     QString m_sharpeningMode = QStringLiteral("off");

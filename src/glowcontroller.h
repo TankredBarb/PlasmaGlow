@@ -18,6 +18,8 @@ class GlowController : public QObject
 {
     Q_OBJECT
     QML_ELEMENT
+    Q_PROPERTY(double vibrance READ vibrance WRITE setVibrance NOTIFY vibranceChanged)
+    Q_PROPERTY(double appliedVibrance READ appliedVibrance NOTIFY appliedStateChanged)
     Q_PROPERTY(double saturation READ saturation WRITE setSaturation NOTIFY saturationChanged)
     Q_PROPERTY(QString output READ output WRITE setOutput NOTIFY outputChanged)
     Q_PROPERTY(QStringList outputs READ outputs NOTIFY outputsChanged)
@@ -59,6 +61,10 @@ public:
     bool adjustmentsEnabled() const;
     void setAdjustmentsEnabled(bool enabled);
 
+    double vibrance() const;
+    void setVibrance(double value);
+    double appliedVibrance() const;
+
     double saturation() const;
     void setSaturation(double value);
 
@@ -82,6 +88,7 @@ public:
     QStringList outputs() const;
 
 Q_SIGNALS:
+    void vibranceChanged();
     void saturationChanged();
     void outputChanged();
     void outputsChanged();
@@ -101,6 +108,8 @@ public Q_SLOTS:
     void applyGamma(double value);
 
 private:
+    double m_vibrance = 0.0;
+    double m_appliedVibrance = 0.0;
     double m_saturation = 1.0;
     double m_gamma = 1.0;
     QString m_sharpeningMode = QStringLiteral("off");

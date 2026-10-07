@@ -142,6 +142,79 @@ static void testScreenPass()
     qInfo() << "PASS:" << cases << "color-pass/scissor cases across all output transforms";
 }
 
+static void testVibrance()
+{
+    const QSize size(1, 1);
+    auto source = GLTexture::allocate(GL_RGBA32F, size);
+    auto destination = GLTexture::allocate(GL_RGBA16, size);
+    source->setFilter(GL_NEAREST);
+    source->setWrapMode(GL_CLAMP_TO_EDGE);
+    GLFramebuffer framebuffer(destination.get());
+    require(framebuffer.valid(), "Vibrance framebuffer failed");
+    GLFramebuffer::pushFramebuffer(&framebuffer);
+    glViewport(0, 0, 1, 1);
+    const auto description = ColorDescription::sRGB->withTransferFunction(
+        TransferFunction(TransferFunction::linear, 0, 80));
+    auto neutralShader = loadPlasmaGlowShader(QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow-color.frag"), false);
+    auto vibrantShader = loadPlasmaGlowShader(QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow-color.frag"), true);
+    require(neutralShader && neutralShader->uniformLocation("plasmaglowVibrance") == -1, "Disabled Vibrance remains in color shader");
+    require(vibrantShader && vibrantShader->uniformLocation("plasmaglowVibrance") >= 0, "Vibrance color shader failed");
+    QMatrix4x4 projection;
+    projection.ortho(0, 1, 0, 1, -1, 1);
+    ComputeSharpening neutralCompute;
+    ComputeSharpening vibrantCompute(true);
+    struct Sample {
+        std::array<float, 4> input;
+        float vibrance;
+        float saturation;
+        std::array<float, 4> expected;
+    };
+    // Fixed linear-light expectations exercise muted colors, protected saturated
+    // colors at different brightnesses, neutral output, ordering and alpha.
+    const Sample samples[] = {
+        {{0, 0, 0, 1}, 1, 1, {0, 0, 0, 1}},
+        {{1, 1, 1, 1}, 1, 1, {1, 1, 1, 1}},
+        {{0.5, 0.5, 0.5, 1}, 1, 1, {0.5, 0.5, 0.5, 1}},
+        {{0.5, 0, 0, 1}, 1, 1, {0.5, 0, 0, 1}},
+        {{0.125, 0, 0, 1}, 1, 1, {0.125, 0, 0, 1}},
+        {{0.5, 0.375, 0.25, 1}, 0, 1, {0.5, 0.375, 0.25, 1}},
+        {{0.5, 0.375, 0.25, 1}, 1, 1, {0.553725, 0.366225, 0.178725, 1}},
+        {{0.5, 0.375, 0.25, 1}, 0, 2, {0.60745, 0.35745, 0.10745, 1}},
+        {{0.5, 0.375, 0.25, 1}, 1, 2, {0.7149, 0.3399, 0, 1}},
+        {{0.5, 0.375, 0.25, 1}, 1, 0, {0.39255, 0.39255, 0.39255, 1}},
+        {{0.25, 0.1875, 0.125, 0.5}, 1, 1, {0.2768625, 0.1831125, 0.0893625, 0.5}},
+        {{0, 0, 0, 0}, 1, 1, {0, 0, 0, 0}},
+    };
+    for (const auto &sample : samples) {
+        GLShader *shader = sample.vibrance != 0.0f ? vibrantShader.get() : neutralShader.get();
+        auto &compute = sample.vibrance != 0.0f ? vibrantCompute : neutralCompute;
+        source->bind();
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_FLOAT, sample.input.data());
+        ShaderManager::instance()->pushShader(shader);
+        shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, projection);
+        shader->setUniform(GLShader::Vec4Uniform::ModulationConstant, QVector4D(1, 1, 1, 1));
+        shader->setUniform(GLShader::IntUniform::Sampler, 0);
+        shader->setUniform("plasmaglowSaturation", sample.saturation);
+        shader->setUniform("plasmaglowVibrance", sample.vibrance);
+        shader->setUniform("gamma", 1.0f);
+        shader->setColorspaceUniforms(description, description, RenderingIntent::RelativeColorimetric);
+        source->render(size);
+        const auto actual = readImage(size, GL_RGBA16);
+        ShaderManager::instance()->popShader();
+        require(compute.dispatch(source.get(), destination.get(), *description,
+            0, sample.saturation, 1, 0, 0, false, sample.vibrance), "Vibrance reference dispatch failed");
+        const auto computed = readImage(size, GL_RGBA16);
+        for (int c = 0; c < 4; ++c) {
+            const int expected = std::lround(sample.expected[c] * 65535);
+            require(std::abs(int(actual[c]) - expected) <= 1, "Color Vibrance differs from fixed expectation");
+            require(std::abs(int(computed[c]) - expected) <= 1, "Compute Vibrance differs from fixed expectation");
+        }
+    }
+    GLFramebuffer::popFramebuffer();
+    require(glGetError() == GL_NO_ERROR, "Vibrance reference OpenGL error");
+    qInfo() << "PASS: Vibrance muted/saturated/gray/black/white/neutral/order/alpha, 12 color and compute cases";
+}
+
 static void testRcas()
 {
     const QSize size(5, 5);
@@ -225,10 +298,12 @@ int main(int argc, char **argv)
         return 77;
     }
     qInfo() << "GPU:" << reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-    auto shader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(),
-        QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow.frag"));
-    require(shader && shader->uniformLocation("sharpeningMode") >= 0, "Fragment shader failed");
-    ComputeSharpening compute;
+    auto neutralShader = loadPlasmaGlowShader(QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow.frag"), false);
+    auto vibrantShader = loadPlasmaGlowShader(QStringLiteral(":/effects/plasmaglow/shaders/plasmaglow.frag"), true);
+    require(neutralShader && neutralShader->uniformLocation("plasmaglowVibrance") == -1, "Disabled Vibrance remains in sharpening shader");
+    require(vibrantShader && vibrantShader->uniformLocation("plasmaglowVibrance") >= 0, "Vibrance sharpening shader failed");
+    ComputeSharpening neutralCompute;
+    ComputeSharpening vibrantCompute(true);
     int cases = 0;
     int worst = 0;
     for (int width : {1, 2, 17, 63}) for (GLenum format : {GL_RGBA8, GL_RGBA16, GL_RGBA16F}) {
@@ -263,7 +338,9 @@ int main(int argc, char **argv)
             for (auto transfer : {TransferFunction::sRGB, TransferFunction::gamma22})
             for (auto transform : {OutputTransform::Normal, OutputTransform::FlipY})
             for (int mode : {1, 2, 3}) for (float gamma : {0.1f, 1.0f, 5.0f})
-            for (float strength : {0.0f, 0.5f, 1.0f}) for (float saturation : {1.0f, 4.0f}) {
+            for (float strength : {0.0f, 0.5f, 1.0f}) for (float saturation : {1.0f, 4.0f}) for (float vibrance : {0.0f, 0.5f, 1.0f}) {
+                GLShader *shader = vibrance != 0.0f ? vibrantShader.get() : neutralShader.get();
+                auto &compute = vibrance != 0.0f ? vibrantCompute : neutralCompute;
                 const float denoise = strength == 0 ? 0 : 1;
                 const auto description = ColorDescription::sRGB->withTransferFunction(TransferFunction(transfer, 0.1, 80));
                 destination->setContentTransform(transform);
@@ -284,11 +361,12 @@ int main(int argc, char **argv)
                 vertices[3] = {tl, {0, 1}}; vertices[4] = {tr, {1, 1}}; vertices[5] = {br, {1, 0}};
                 vbo.unmap();
                 source->bind();
-                ShaderManager::instance()->pushShader(shader.get());
+                ShaderManager::instance()->pushShader(shader);
                 shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
                 shader->setUniform(GLShader::Vec4Uniform::ModulationConstant, QVector4D(1, 1, 1, 1));
                 shader->setUniform(GLShader::IntUniform::Sampler, 0);
                 shader->setUniform("plasmaglowSaturation", saturation);
+                shader->setUniform("plasmaglowVibrance", vibrance);
                 shader->setUniform("gamma", gamma);
                 shader->setUniform("sharpeningMode", mode);
                 shader->setUniform("sharpeningStrength", strength);
@@ -323,7 +401,7 @@ int main(int argc, char **argv)
                 RenderViewport offsetViewport(rect, scale, target, QPoint(1, 0));
                 require(!computeOutputFlipY(target, offsetViewport, rect, size, Region::infinite(), mode), "Offset selected compute");
                 require(compute.dispatch(source.get(), destination.get(), *description, mode,
-                    saturation, gamma, strength, denoise, projected.y() < 0), "Compute dispatch failed");
+                    saturation, gamma, strength, denoise, projected.y() < 0, vibrance), "Compute dispatch failed");
                 GLint restored;
                 glGetIntegerv(GL_CURRENT_PROGRAM, &restored);
                 require(restored == oldProgram, "Program binding was not restored");
@@ -398,6 +476,7 @@ int main(int argc, char **argv)
     }
     testScreenPass();
     testRcas();
+    testVibrance();
     qInfo() << "PASS:" << cases << "fragment/compute comparisons; maximum storage step difference:" << worst;
     return 0;
 }
