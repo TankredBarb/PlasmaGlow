@@ -92,6 +92,32 @@ vec3 sharpenLuma(vec3 center)
     return result;
 }
 
+// RCAS: FsrRcasF from AMD FidelityFX FSR, without FSR_RCAS_DENOISE.
+// Copyright (c) 2021 Advanced Micro Devices, Inc. All rights reserved.
+// SPDX-License-Identifier: MIT (see THIRD_PARTY_NOTICES.md).
+// Work in gamma-2 encoded SDR, then return to normalized linear light.
+vec3 sharpenRcas(vec3 center)
+{
+    vec3 b = sqrt(clamp(sampleLinear(ivec2(0, -1)), 0.0, 1.0));
+    vec3 d = sqrt(clamp(sampleLinear(ivec2(-1, 0)), 0.0, 1.0));
+    vec3 e = sqrt(clamp(center, 0.0, 1.0));
+    vec3 f = sqrt(clamp(sampleLinear(ivec2(1, 0)), 0.0, 1.0));
+    vec3 h = sqrt(clamp(sampleLinear(ivec2(0, 1)), 0.0, 1.0));
+    vec3 minimum = min(min(b, d), min(f, h));
+    vec3 maximum = max(max(b, d), max(f, h));
+    // Finite limiting values for constant black/white neighborhoods.
+    vec3 hitMin = min(minimum, e) / max(4.0 * maximum, vec3(1.0e-6));
+    vec3 hitMax = (1.0 - max(maximum, e)) / min(4.0 * minimum - 4.0, vec3(-1.0e-6));
+    vec3 lobes = max(-hitMin, hitMax);
+    float lobe = max(-0.1875, min(max(max(lobes.r, lobes.g), lobes.b), 0.0));
+    // The first half covers native attenuation; the second adds CAS-style overdrive.
+    lobe *= exp2(-2.0 * (1.0 - min(2.0 * sharpeningStrength, 1.0)));
+    vec3 result = clamp((lobe * b + lobe * d + lobe * h + lobe * f + e)
+        / (4.0 * lobe + 1.0), 0.0, 1.0);
+    float gain = 1.0 + 3.0 * max(2.0 * sharpeningStrength - 1.0, 0.0);
+    return clamp(center + (result * result - center) * gain, 0.0, 1.0);
+}
+
 vec4 adjustColor(vec4 color)
 {
     float alpha = color.a;
@@ -102,6 +128,8 @@ vec4 adjustColor(vec4 color)
         rgb = sharpenCas(rgb / referenceLuminance) * referenceLuminance;
     } else if (sharpeningMode == 2) {
         rgb = sharpenLuma(rgb / referenceLuminance) * referenceLuminance;
+    } else if (sharpeningMode == 3) {
+        rgb = sharpenRcas(rgb / referenceLuminance) * referenceLuminance;
     }
     float luminance = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
     rgb = vec3(luminance) + plasmaglowSaturation * (rgb - vec3(luminance));

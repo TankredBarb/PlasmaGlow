@@ -142,6 +142,67 @@ static void testScreenPass()
     qInfo() << "PASS:" << cases << "color-pass/scissor cases across all output transforms";
 }
 
+static void testRcas()
+{
+    const QSize size(5, 5);
+    auto source = GLTexture::allocate(GL_RGBA8, size);
+    auto destination = GLTexture::allocate(GL_RGBA16, size);
+    GLFramebuffer framebuffer(destination.get());
+    require(framebuffer.valid(), "RCAS framebuffer failed");
+    GLFramebuffer::pushFramebuffer(&framebuffer);
+    glViewport(0, 0, 5, 5);
+    const auto description = ColorDescription::sRGB->withTransferFunction(
+        TransferFunction(TransferFunction::gamma22, 0, 80));
+    ComputeSharpening compute;
+    int previous = 0;
+    for (int field : {0, 255, 112, 200, 32}) {
+        std::vector<unsigned char> input(5 * 5 * 4, field);
+        for (size_t i = 3; i < input.size(); i += 4) input[i] = 255;
+        const int center = (2 * 5 + 2) * 4;
+        if (field != 0 && field != 255) {
+            for (int c = 0; c < 3; ++c) input[center + c] = 128;
+        }
+        source->bind();
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 5, 5, GL_RGBA, GL_UNSIGNED_BYTE, input.data());
+        for (float strength : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+            require(compute.dispatch(source.get(), destination.get(), *description,
+                3, 1, 1, strength, 0, false), "RCAS reference dispatch failed");
+            const auto actual = readImage(size, GL_RGBA16);
+            // Symmetric crosses exercise the fixed -3/16 cap, the black
+            // clipping limit (200), and the white clipping limit (32).
+            // Analytic result includes gamma-2 filtering and gamma-2.2 output.
+            const double e = std::pow(128.0 / 255, 1.1);
+            const double neighbor = std::pow(field / 255.0, 1.1);
+            const double attenuation[] = {0.25, 0.5, 1.0, 1.0, 1.0};
+            const double gains[] = {1.0, 1.0, 1.0, 2.5, 4.0};
+            const int preset = std::lround(strength * 4);
+            const double limit = field == 200 ? -e / (4 * neighbor)
+                : field == 32 ? (1 - e) / (4 * neighbor - 4) : -3.0 / 16;
+            const double weight = limit * attenuation[preset];
+            const double sharpened = (e + 4 * neighbor * weight) / (1 + 4 * weight);
+            const double linear = std::clamp(e * e + (sharpened * sharpened - e * e) * gains[preset], 0.0, 1.0);
+            const int expected = field != 0 && field != 255 ? std::lround(std::pow(linear, 1.0 / 2.2) * 65535)
+                : field == 0 ? 0 : 65535;
+            for (int c = 0; c < 3; ++c) {
+                require(std::abs(int(actual[center + c]) - expected) <= 1,
+                    "RCAS differs from analytic strength reference");
+            }
+            for (size_t i = 3; i < actual.size(); i += 4) require(actual[i] == 65535, "RCAS changed alpha");
+            if (field == 112) {
+                require(actual[center] > previous, "RCAS strength did not increase");
+                previous = actual[center];
+            } else if (field == 0 || field == 255) {
+                for (size_t i = 0; i < actual.size(); ++i) {
+                    require(actual[i] == (i % 4 == 3 ? 65535 : expected), "RCAS changed black/white flat field");
+                }
+            }
+        }
+    }
+    GLFramebuffer::popFramebuffer();
+    require(glGetError() == GL_NO_ERROR, "RCAS reference OpenGL error");
+    qInfo() << "PASS: RCAS analytic kernel/strength/clipping reference, black/white fields and alpha, 25 cases";
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
@@ -201,7 +262,7 @@ int main(int argc, char **argv)
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, size.height(), GL_RGBA, GL_FLOAT, input.data());
             for (auto transfer : {TransferFunction::sRGB, TransferFunction::gamma22})
             for (auto transform : {OutputTransform::Normal, OutputTransform::FlipY})
-            for (int mode : {1, 2}) for (float gamma : {0.1f, 1.0f, 5.0f})
+            for (int mode : {1, 2, 3}) for (float gamma : {0.1f, 1.0f, 5.0f})
             for (float strength : {0.0f, 0.5f, 1.0f}) for (float saturation : {1.0f, 4.0f}) {
                 const float denoise = strength == 0 ? 0 : 1;
                 const auto description = ColorDescription::sRGB->withTransferFunction(TransferFunction(transfer, 0.1, 80));
@@ -336,6 +397,7 @@ int main(int argc, char **argv)
         require(!computeOutputFlipY(target, viewport, rect, texture->size(), Region::infinite(), 1), "Unsupported format selected compute");
     }
     testScreenPass();
+    testRcas();
     qInfo() << "PASS:" << cases << "fragment/compute comparisons; maximum storage step difference:" << worst;
     return 0;
 }

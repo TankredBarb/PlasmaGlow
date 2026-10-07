@@ -32,14 +32,21 @@ D-Bus session and temporary settings.
 
 ## Sharpening
 
-On Plasma Wayland, the **Sharpening** section selects **Off**, **CAS**, or
-**Luma** (Denoised Luma Sharpening), adapted from FrameFlow's shaders. Strength
+On Plasma Wayland, the **Sharpening** section selects **Off**, **CAS**,
+**Luma** (Denoised Luma Sharpening), or **RCAS** (Robust Contrast Adaptive
+Sharpening). CAS/Luma are adapted from FrameFlow; RCAS from AMD FidelityFX FSR. Strength
 ranges from 0 to 100%; Luma also has a noise suppression slider.
 The first 50% spans the original algorithm strength range. Above 50%, an
 overdrive gain increases the sharpening delta, reaching 4× at 100% before
 clamping RGB to the SDR range. The upper end deliberately produces strong
 halos and clipping; use lower values for normal viewing. As in the
 original algorithms, 0% is the minimum active strength; select Off to disable.
+RCAS reaches maximum native strength at 50% (two stops of attenuation at 0%,
+one stop at 25%). Above 50% it uses the same 1–4× linear-light overdrive as CAS.
+The optional RCAS noise suppression remains disabled. Its five-tap cross
+filters gamma-2 encoded SDR and returns to linear light before overdrive and
+color correction. It shares the existing compute tile
+and fragment fallback. Equal slider values do not imply equal visible sharpness.
 The defaults are Off, 50% strength, and 17% noise suppression. Reset restores
 these defaults together with neutral saturation and gamma.
 
@@ -56,8 +63,9 @@ fails to compile at startup, the effect falls back to Off and retains color
 adjustment. A rejected sharpening request leaves the controls usable.
 
 Sharpening runs on the composited desktop, including games, before saturation
-and gamma, in the existing screen pass. It samples a 3×3 neighbourhood in
-normalized linear light, clamps sampling at each output's edges, and preserves
+and gamma, in the existing screen pass. CAS/Luma sample a 3×3 neighbourhood in
+normalized linear light; RCAS uses the cross within that neighbourhood. Each
+mode clamps sampling at each output's edges and preserves
 alpha. Each output retains its own source texture for partial updates. Settings
 are saved per user as `sharpeningMode`, `sharpeningStrength`, and
 `sharpeningDenoise` in the General group of `plasmaglowrc` and loaded by KWin

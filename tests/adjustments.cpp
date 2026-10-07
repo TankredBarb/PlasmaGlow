@@ -149,7 +149,34 @@ int main(int argc, char **argv)
         }
         require(dialogs == 1, "About dialog duplicated or did not open");
     }
-    std::cout << "PASS disable/restore, refresh, rapid toggles, persistence, paused startup/reset, native About dialog\n";
+    {
+        GlowController controller;
+        waitFor([&] { return controller.backendReady(); });
+        controller.setAdjustmentsEnabled(true);
+        controller.setSharpeningMode(QStringLiteral("rcas"));
+        controller.setSharpeningStrength(0.75);
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("rcas")
+                            && controller.appliedSharpeningStrength() == 0.75; });
+        controller.setSharpeningMode(QStringLiteral("nis"));
+        require(controller.sharpeningMode() == QStringLiteral("rcas"), "Invalid mode replaced RCAS");
+        controller.setAdjustmentsEnabled(false);
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("off"); });
+    }
+    {
+        GlowController controller;
+        require(controller.sharpeningMode() == QStringLiteral("rcas") && !controller.adjustmentsEnabled(),
+                "RCAS persistence or paused startup failed");
+        waitFor([&] { return controller.backendReady(); });
+        controller.setAdjustmentsEnabled(true);
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("rcas"); });
+        for (const QString &mode : {QStringLiteral("cas"), QStringLiteral("luma"), QStringLiteral("rcas")}) {
+            controller.setSharpeningMode(mode);
+            waitFor([&] { return controller.appliedSharpeningMode() == mode; });
+        }
+        controller.reset();
+        waitFor([&] { return controller.appliedSharpeningMode() == QStringLiteral("off"); });
+    }
+    std::cout << "PASS disable/restore, refresh, rapid toggles, persistence, paused startup/reset, native About dialog, RCAS persistence/transitions/reset\n";
     return 0;
 }
 

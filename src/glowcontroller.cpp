@@ -41,7 +41,7 @@ GlowController::GlowController(QObject *parent)
     m_saturation = readSetting(group, QStringLiteral("saturation"), 1.0, minimumSaturation, maximumSaturation);
     m_gamma = readSetting(group, QStringLiteral("gamma"), 1.0, minimumGamma, maximumGamma);
     const QString mode = group.readEntry(QStringLiteral("sharpeningMode"), QStringLiteral("off"));
-    if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma")) {
+    if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma") || mode == QLatin1String("rcas")) {
         m_sharpeningMode = mode;
     }
     m_sharpeningStrength = readSetting(group, QStringLiteral("sharpeningStrength"), 0.5, 0.0, 1.0);
@@ -372,7 +372,7 @@ QString GlowController::sharpeningMode() const
 void GlowController::setSharpeningMode(const QString &mode)
 {
     if (mode == m_sharpeningMode
-        || (mode != QLatin1String("off") && mode != QLatin1String("cas") && mode != QLatin1String("luma"))) {
+        || (mode != QLatin1String("off") && mode != QLatin1String("cas") && mode != QLatin1String("luma") && mode != QLatin1String("rcas"))) {
         return;
     }
     m_sharpeningMode = mode;

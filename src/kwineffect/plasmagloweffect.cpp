@@ -57,7 +57,7 @@ PlasmaGlowEffect::PlasmaGlowEffect()
 
     if (!m_isGreeter && enabled) {
         const QString mode = settings.readEntry(QStringLiteral("sharpeningMode"), QStringLiteral("off"));
-        if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma")) {
+        if (mode == QLatin1String("off") || mode == QLatin1String("cas") || mode == QLatin1String("luma") || mode == QLatin1String("rcas")) {
             m_sharpeningMode = mode;
         }
         const double strength = settings.readEntry(QStringLiteral("sharpeningStrength"), 0.5);
@@ -234,7 +234,7 @@ bool PlasmaGlowEffect::setAllParameters(double saturation, double gamma, const Q
         || saturation < kMinimumSaturation || saturation > kMaximumSaturation
         || gamma < kMinimumGamma || gamma > kMaximumGamma
         || (sharpeningMode != QLatin1String("off") && sharpeningMode != QLatin1String("cas")
-            && sharpeningMode != QLatin1String("luma"))
+            && sharpeningMode != QLatin1String("luma") && sharpeningMode != QLatin1String("rcas"))
         || !std::isfinite(sharpeningStrength) || sharpeningStrength < 0.0 || sharpeningStrength > 1.0
         || !std::isfinite(sharpeningDenoise) || sharpeningDenoise < 0.0 || sharpeningDenoise > 1.0) {
         m_lastError = QStringLiteral("Color or sharpening parameters are outside the supported range");
@@ -345,7 +345,8 @@ void PlasmaGlowEffect::paintScreen(const RenderTarget &renderTarget,
             || description->maxHdrLuminance().value_or(description->referenceLuminance())
                 > description->referenceLuminance() * 1.01;
         if (!hdr) {
-            mode = m_sharpeningMode == QLatin1String("cas") ? 1 : 2;
+            mode = m_sharpeningMode == QLatin1String("cas") ? 1
+                : m_sharpeningMode == QLatin1String("luma") ? 2 : 3;
         }
     }
     const auto transfer = description->transferFunction().type;

@@ -383,3 +383,55 @@ output transform per pixel and verifies both pixels outside the damage region
 and intersection with the existing scissor box, as well as GL state restoration.
 These are isolated GPU tests of the production helpers, not a complete KWin
 effect-chain integration test.
+
+## RCAS follow-up: two live Wukong runs
+
+2026-10-07. RCAS strength 0.5 now reaches the native RCAS maximum; the upper
+half of the widget slider adds the same 1–4x linear-light overdrive as CAS.
+Both measured runs used gamma 0.9, saturation 2 and strength 0.5. The stored
+denoise value was 0.17, but RCAS does not use it. Its optional noise suppression
+is disabled. No additional neutral, color-only, CAS or Luma measurements were
+requested for this follow-up; the earlier warmup is excluded from this table.
+
+The loaded KWin library's inode matched the installed plugin before the runs.
+D-Bus reported RCAS compute on GL_RGBA16/gamma22 before, between and after the
+runs, without continuous render-path tracing. Steam's actual launch log confirms
+`DISABLE_LSFGVK=1 DISABLE_MANGOHUD=1 DISABLE_VKBASALT=1` for both launches.
+The two JSON histories have identical non-result metadata. Their documented
+settings match the earlier comparison: 1920x1080, QualityLevel 3, ImageQuality
+65, DX12, no ray tracing or built-in frame generation, game version 1.0.3.14649,
+Ryzen 5 5500 and RX 6600 XT.
+
+| Mode | Date | Reported average FPS | Median game GPU, ms | p95 game GPU, ms |
+|---|---|---:|---:|---:|
+| Color + CAS | 2026-10-03 | 71 | 12.921 | 14.322 |
+| Color + Luma 1 | 2026-10-03 | 71 | 12.903 | 14.306 |
+| Color + Luma 2 | 2026-10-03 | 71 | 12.887 | 14.318 |
+| Color + RCAS 1 | 2026-10-07 | 71 | 12.926 | 14.335 |
+| Color + RCAS 2 | 2026-10-07 | 70 | 12.928 | 14.359 |
+
+RCAS history IDs are 1791377632 (10,026 records over 141.672 seconds) and
+1791377937 (10,020 records over 141.670 seconds). Results were read from
+`steamapps/.compatdata-users/1000/3132990/pfx/drive_c/users/steamuser/AppData/Local/Temp/b1/BenchMarkHistory/Tool/<history ID>`.
+Median game CPU times are 7.175 / 7.094 ms; minimum FPS 33 / 34, maximum FPS
+81 / 83, and the reported FPS95 field is 64 in both runs. RCAS p95 values use
+linear interpolation at the 95th percentile of the recorded GPU times.
+Raw histories and extracted metrics were preserved under
+`/tmp/plasmaglow-wukong-rcas-2026-10-07/`.
+
+The two RCAS GPU medians differ by 0.002 ms and lie 0.005–0.007 ms above the
+earlier CAS median. This is consistent with a comparable overall performance
+level in this workload, but the measurements come from different days and
+Wayland sessions. They do not isolate the incremental RCAS pass cost, establish
+a reliable advantage over CAS/Luma, or quantify loss relative to a contemporary
+neutral baseline. The reported average FPS differs by one integer while GPU
+medians remain close. These remain game timings under concurrent compositor
+load, not isolated shader timings or results with lsfg-vk enabled.
+
+The reviewed implementation passed all three CTest targets on RX 6600 XT,
+including 7,776 fragment/compute comparisons with at most one storage-step
+difference. RCAS's independent analytic fixtures now exercise the fixed lobe
+cap, both adaptive clipping limits, black/white flat fields, alpha and all five
+strength presets (25 cases). Persistence, paused restore, mode transitions and
+Reset are also covered. These checks establish implementation correctness on
+the fixtures; live visual preference remains the user's assessment.

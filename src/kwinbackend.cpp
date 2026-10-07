@@ -29,7 +29,7 @@ quint64 KWinBackend::applyParameters(double saturation, double gamma,
     if (!std::isfinite(saturation) || !std::isfinite(gamma)
         || !std::isfinite(sharpeningStrength) || !std::isfinite(sharpeningDenoise)
         || (sharpeningMode != QLatin1String("off") && sharpeningMode != QLatin1String("cas")
-            && sharpeningMode != QLatin1String("luma"))) {
+            && sharpeningMode != QLatin1String("luma") && sharpeningMode != QLatin1String("rcas"))) {
         return 0;
     }
 
@@ -184,7 +184,7 @@ void KWinBackend::acceptState(const QVariantMap &state)
         || !std::isfinite(sharpeningStrength) || sharpeningStrength < 0.0 || sharpeningStrength > 1.0
         || !std::isfinite(sharpeningDenoise) || sharpeningDenoise < 0.0 || sharpeningDenoise > 1.0
         || (sharpeningMode != QLatin1String("off") && sharpeningMode != QLatin1String("cas")
-            && sharpeningMode != QLatin1String("luma"))
+            && sharpeningMode != QLatin1String("luma") && sharpeningMode != QLatin1String("rcas"))
         || !std::isfinite(saturation) || !std::isfinite(gamma)
         || saturation < minimumSaturation || saturation > maximumSaturation
         || gamma < minimumGamma || gamma > maximumGamma) {

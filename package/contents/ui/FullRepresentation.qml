@@ -510,19 +510,19 @@ PlasmaExtras.Representation {
                         spacing: Kirigami.Units.smallSpacing
 
                         Repeater {
-                            model: ["off", "cas", "luma"]
+                            model: ["off", "cas", "luma", "rcas"]
                             delegate: QQC2.Button {
                                 id: modeButton
                                 required property string modelData
-                                readonly property color accent: modelData === "off" ? "#d8a0ff" : modelData === "cas" ? "#ff8040" : "#00e5ff"
-                                readonly property color gradientStart: modelData === "off" ? "#8842c7" : modelData === "cas" ? "#d46b10" : "#008c86"
-                                readonly property color gradientEnd: modelData === "off" ? "#5a2aa0" : modelData === "cas" ? "#c42159" : "#3060d5"
+                                readonly property color accent: modelData === "off" ? "#d8a0ff" : modelData === "cas" ? "#ff8040" : modelData === "luma" ? "#00e5ff" : "#76e33a"
+                                readonly property color gradientStart: modelData === "off" ? "#8842c7" : modelData === "cas" ? "#d46b10" : modelData === "luma" ? "#008c86" : "#397c16"
+                                readonly property color gradientEnd: modelData === "off" ? "#5a2aa0" : modelData === "cas" ? "#c42159" : modelData === "luma" ? "#3060d5" : "#16804a"
                                 readonly property color foreground: "#ffffff"
                                 objectName: "modeButton-" + modelData
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                                 padding: Kirigami.Units.smallSpacing
-                                text: modelData === "off" ? "Off" : modelData === "cas" ? "CAS" : "Luma"
+                                text: modelData === "off" ? "Off" : modelData === "cas" ? "CAS" : modelData === "luma" ? "Luma" : "RCAS"
                                 checkable: true
                                 autoExclusive: true
                                 checked: root.plasmoidItem.controller.sharpeningMode === modelData
@@ -532,7 +532,8 @@ PlasmaExtras.Representation {
                                     visible: root.visible && modeButton.hovered && !modeButton.down && !optionsMenu.visible
                                     text: modeButton.modelData === "off" ? "Disable sharpening. Color adjustments remain active."
                                         : modeButton.modelData === "cas" ? "Contrast Adaptive Sharpening: enhance detail using local contrast."
-                                        : "Luma sharpening: enhance brightness detail with adjustable noise suppression."
+                                        : modeButton.modelData === "luma" ? "Luma sharpening: enhance brightness detail with adjustable noise suppression."
+                                        : "Robust Contrast Adaptive Sharpening: sharpen upscaled images, with overdrive above 50%."
                                 }
 
                                 contentItem: Item {
@@ -545,6 +546,7 @@ PlasmaExtras.Representation {
                                         Kirigami.Icon {
                                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                            visible: modeButton.width >= Kirigami.Units.gridUnit * 4
                                             source: Qt.resolvedUrl("mode-" + modeButton.modelData + ".svg")
                                             isMask: true
                                             color: modeButton.foreground
