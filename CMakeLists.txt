@@ -11,6 +11,12 @@ set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 
 # Include standard KDE and CMake settings
 include(KDEInstallDirs)
+
+option(PLASMAGLOW_BUILD_LITE "Build the standalone X11/NVIDIA PlasmaGlow Lite tools" OFF)
+if(PLASMAGLOW_BUILD_LITE)
+    add_subdirectory(extras/plasmaglow-lite)
+endif()
+
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 include(FeatureSummary)

@@ -2,6 +2,11 @@
 
 KDE Plasma 6 applet for adjusting color saturation, gamma, and global sharpening.
 
+An independent lightweight X11/NVIDIA utility is preserved in
+[extras/plasmaglow-lite](extras/plasmaglow-lite). It builds on its own without
+Qt/KDE, or alongside this project with `-DPLASMAGLOW_BUILD_LITE=ON` (off by
+default). It is not an applet backend and uses its own settings.
+
 ## Backends
 
 - **X11:** uses `vibrant-cli` for saturation on the selected output and `xgamma`

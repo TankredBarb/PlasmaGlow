@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=PlasmaGlow Lite
+Comment=Adjust screen vibrance and gamma
+Exec=plasmaglow-lite
+Icon=preferences-desktop-display
+Terminal=false
+Categories=Settings;HardwareSettings;
